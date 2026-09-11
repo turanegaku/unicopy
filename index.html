@@ -69,6 +69,42 @@
 
     #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 20px; display: none; z-index: 1000; font-size: 0.9rem; }
     .empty-msg { text-align: center; color: #999; padding: 10px; font-size: 1.1rem; grid-column: 1 / -1; }
+
+    /* ================= 縮退ツリー窓 ================= */
+    /* ツリーOFFのときはページスクロールのまま＝従来の index.html と同じ挙動。
+       ONのときだけ一覧を独立したスクロールコンテナにしてツリーと縦位置を同期させる。 */
+    .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
+    .tree-bar input[type="text"] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; min-width: 210px; }
+    .tree-bar button { padding: 6px 14px; background: #3498db; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: inherit; }
+    .tree-bar button:hover:not(:disabled) { background: #2980b9; }
+    .tree-bar button:disabled { background: #bdc3c7; cursor: default; }
+    .tree-bar .status { color: #7f8c8d; margin-left: auto; }
+    .tree-bar .credit { flex-basis: 100%; font-size: 0.7rem; color: #aaa; }
+    .tree-bar .credit a { color: #aaa; }
+    .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
+    .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
+
+    #kanjiPanes { display: flex; gap: 12px; align-items: flex-start; }
+    #kanjiContainer { flex: 1; min-width: 0; }
+    body.tree-on #kanjiContainer { height: calc(100vh - 210px); overflow-y: auto; overflow-x: hidden; }
+    #treePane { display: none; flex: 0 0 470px; height: calc(100vh - 210px); overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; }
+    body.tree-on #treePane { display: block; }
+
+    .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 0.68rem; color: #7f8c8d; }
+    .tree-head div { text-align: center; padding: 6px 0; }
+    .tree-head div.foc { color: #2c3e50; background: #ebf5fb; font-weight: bold; }
+    #treeBody { position: relative; }
+    .tree-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid #f4f4f4; }
+    .tree-row.on { background: #ebf5fb; }
+    .tree-sec { position: absolute; left: 0; right: 0; font-size: 0.75rem; font-weight: bold; color: #7f8c8d; background: #f4f4f4; padding-top: 8px; }
+    .tree-line { position: absolute; top: 18px; height: 1px; background: #cfd8dc; }
+    .tree-node { position: absolute; width: 90px; margin-left: -45px; text-align: center; }
+    .tree-node .g { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; font-size: 1.3rem; line-height: 1.15; display: block; cursor: pointer; }
+    .tree-node .m { font-size: 0.55rem; color: #aaa; display: block; line-height: 1.1; white-space: nowrap; }
+    .tree-node.hit .g { border-radius: 3px; }
+    .tree-node .src { font-size: 0.55rem; color: #7f8c8d; letter-spacing: 1px; }
+    .tree-empty { padding: 20px; color: #999; font-size: 0.85rem; text-align: center; }
   </style>
 </head>
 <body>
@@ -82,8 +118,23 @@
 
   <!-- ================= 漢字モード ================= -->
   <div id="kanji" class="tab-content active">
+    <div class="tree-bar">
+      <label>縮退データ: <input type="file" id="mjmapInput" accept=".json"></label>
+      <button id="treeToggle" disabled>ツリー OFF</button>
+      <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81" disabled>
+      <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
+      <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
+      <!-- MJ縮退マップ/MJ文字情報一覧表は CC BY-SA 2.1 JP。利用条件として出典表示が必要 -->
+      <span class="credit">縮退データ: 文字情報基盤
+        <a href="https://moji.or.jp/mojikiban/">MJ文字情報一覧表</a> ／
+        <a href="https://moji.or.jp/mojikiban/map/">MJ縮退マップ</a>
+        (IPA, CC BY-SA 2.1 JP)</span>
+    </div>
     <div class="search-container" id="radicalListboxes"></div>
-    <div id="kanjiContainer"></div>
+    <div id="kanjiPanes">
+      <div id="kanjiContainer"></div>
+      <div id="treePane"><div class="tree-empty">縮退データ未読込</div></div>
+    </div>
   </div>
 
   <!-- ================= 変体仮名モード ================= -->
@@ -566,6 +617,7 @@
     function renderKanji() {
       const container = document.getElementById('kanjiContainer');
       container.innerHTML = '';
+      listOrder = []; cardEls = [];
 
       let targetChars = null; // null = すべて
       const checked = document.querySelector('input[name="radical"]:checked');
@@ -605,6 +657,7 @@
       });
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
+      rebuildTree();
     }
 
     function createKanjiCard(char, level, ku, kuLabel, parent) {
@@ -612,8 +665,14 @@
       card.className = `card lvl${level}`;
       card.innerHTML = `${kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : ''}<span class="char-main">${char}</span>`;
       card.title = `漢字「${char}」 第${level}水準 区${ku}`;
+      card.dataset.char = char;
+      card.dataset.i = listOrder.length;
       card.onclick = () => copyText(char, `漢字「${char}」`);
       parent.appendChild(card);
+      // ツリーの行順・縦スクロール同期の基準として一覧の並びを控えておく
+      charLevel.set(char, level);
+      listOrder.push({ char, level, ku });
+      cardEls.push(card);
     }
 
     // --- 変体仮名モードのUI制御（あ行/か行…ごとにセパレートし、ひらがな単位で改行して常時全件表示） ---
@@ -667,6 +726,404 @@
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する変体仮名が見つかりませんでした。</div>';
     }
 
+    /* =====================================================================
+       縮退・包摂ツリー（mjmap.json）
+       tools/build-mjmap.py が MJ文字情報一覧表(xlsx=字形/IVS) と
+       MJ縮退マップ(json=縮退グラフ) を統合した mjmap.json を読む。
+       ツリーは「1行 = 1 MJ字形」。行内のノードはその字自身の水準の列に置き、
+       左ほど縮退の終着点(第1水準)、右ほど源流(MJ)になる。
+       ===================================================================== */
+    const LEVEL_COLOR = { 1: "#3498db", 2: "#9b59b6", 3: "#e67e22", 4: "#e74c3c", 5: "#7f8c8d" };
+    const SRC_MARK = ["包", "告", "戸", "辞", "読"]; // mjmap.json の src と同じ並び
+    const COL_W = 92, ROW_H = 38, SUB_H = 26, SEC_H = 30;
+    const COL_LABEL = ["第1水準", "第2水準", "第3水準", "第4水準", "MJ(JIS外)"];
+
+    let mjmap = null;
+    let hasIPAmjFont = false;
+    const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
+    const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
+    const candByMj = new Map();   // MJ index -> [候補]
+    const mjIndex = new Map();    // "MJ000089" -> index
+    const jisChar = new Map();    // "1-18-81" -> "会"
+
+    // 一覧の描画順。ツリーの行順と縦スクロール同期の基準になる
+    let listOrder = [], cardEls = [];
+    let treeRows = [], firstRowOf = [];
+
+    const el = id => document.getElementById(id);
+    const cp = hex => hex ? String.fromCodePoint(parseInt(hex, 16)) : "";
+    const push = (map, k, v) => { const a = map.get(k); a ? a.push(v) : map.set(k, [v]); };
+
+    // ---- IndexedDB（mjmap.json は 4〜5MB あり localStorage には入らない） ----
+    function idb(mode, fn) {
+      return new Promise((res, rej) => {
+        const rq = indexedDB.open("unicopy", 1);
+        rq.onupgradeneeded = () => rq.result.createObjectStore("kv");
+        rq.onerror = () => rej(rq.error);
+        rq.onsuccess = () => {
+          const tx = rq.result.transaction("kv", mode);
+          const r = fn(tx.objectStore("kv"));
+          tx.oncomplete = () => res(r && r.result);
+          tx.onerror = () => rej(tx.error);
+        };
+      });
+    }
+
+    // ---- IPAmj明朝の検出（IVS付き文字を正しい字形で描けるか） ----
+    function checkIPAmjFont() {
+      let ok = false;
+      if (document.fonts && document.fonts.check) {
+        ok = document.fonts.check('16px "IPAmj明朝"') || document.fonts.check('16px "IPAmjMincho"');
+      }
+      if (!ok) {
+        // fonts.check が当てにならない環境向け。同じ字を2種のフォントで描いて差を見る
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = 40;
+        const ctx = cv.getContext("2d", { willReadFrequently: true });
+        const draw = font => {
+          ctx.clearRect(0, 0, 40, 40);
+          ctx.font = font; ctx.textBaseline = "top"; ctx.fillText("廝", 0, 0);
+          return ctx.getImageData(0, 0, 40, 40).data.toString();
+        };
+        ok = draw("30px monospace") !== draw("30px 'IPAmj明朝', 'IPAmjMincho', monospace");
+      }
+      hasIPAmjFont = ok;
+      updateFontBadge();
+    }
+
+    function updateFontBadge() {
+      const b = el("fontBadge");
+      b.textContent = hasIPAmjFont ? "IPAmj明朝: 有効" : "IPAmj明朝: 未検出";
+      b.className = "font-status-btn " + (hasIPAmjFont ? "status-active" : "status-inactive");
+    }
+
+    // ---- mjmap.json の取り込み ----
+    function loadMjmap(text) {
+      mjmap = JSON.parse(text);
+      mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
+
+      mjmap.mj.forEach((m, i) => {
+        mjIndex.set(m[0], i);
+        if (m[3]) { jisChar.set(m[3], cp(m[1])); push(mjByChar, cp(m[1]), i); }
+      });
+      mjmap.cand.forEach(c => {
+        const ch = cp(c[1]);
+        jisChar.set(c[2], ch);
+        push(candByMj, c[0], c);
+        push(mjByChar, ch, c[0]);
+      });
+      mjByChar.forEach((a, k) => {
+        a.sort((x, y) => x - y);
+        mjByChar.set(k, a.filter((v, i) => i === 0 || v !== a[i - 1]));
+      });
+
+      el("mjmapStatus").textContent =
+        `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退候補 ${mjmap.cand.length.toLocaleString()}件`;
+      el("treeToggle").disabled = false;
+      el("mjSearch").disabled = false;
+      rebuildTree();
+    }
+
+    el("mjmapInput").addEventListener("change", e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      el("mjmapStatus").textContent = "読み込み中...";
+      const r = new FileReader();
+      r.onload = ev => {
+        try {
+          loadMjmap(ev.target.result);
+          idb("readwrite", s => s.put(ev.target.result, "mjmap")).catch(() => {});
+        } catch (err) {
+          el("mjmapStatus").textContent = "読み込みに失敗: " + err.message;
+        }
+      };
+      r.readAsText(f);
+    });
+
+    /* ---- ツリーの行を組む ----
+       行の並びは一覧のカード順。各カードの文字に関わる MJ をその下にぶら下げる。
+       複数のJIS字に縮退するMJは、それぞれのカードの下に重複して現れる（逆引きとして正しい）。 */
+    function rebuildTree() {
+      const pane = el("treePane");
+      if (!mjmap) { pane.innerHTML = '<div class="tree-empty">縮退データ未読込</div>'; return; }
+
+      treeRows = []; firstRowOf = [];
+      const seen = new Set();
+      listOrder.forEach((it, i) => {
+        firstRowOf[i] = treeRows.length;
+        (mjByChar.get(it.char) || []).forEach(m => { seen.add(m); treeRows.push({ mj: m, anchor: i }); });
+      });
+
+      // 縮退先を1つも持たないMJ（23,011字）。捨てずに末尾のセクションに出す
+      const orphans = [];
+      if (!document.querySelector('input[name="radical"]:checked')) {
+        mjmap.mj.forEach((m, i) => { if (!candByMj.has(i) && !seen.has(i)) orphans.push(i); });
+      }
+      if (orphans.length) {
+        treeRows.push({ sec: `縮退先なし ${orphans.length.toLocaleString()}字`, anchor: listOrder.length - 1 });
+        orphans.forEach(m => treeRows.push({ mj: m, anchor: listOrder.length - 1 }));
+      }
+
+      // 行の縦位置。同一列に複数ノードが来る行は縦に積むので高さが変わる。
+      // 累積和で持っておけば描画時は二分探索で先頭行を引けるだけで済む（DPは要らない）。
+      let y = 0;
+      treeRows.forEach(r => {
+        r.y = y;
+        r.h = r.sec ? SEC_H : ROW_H + (rowLines(r.mj) - 1) * SUB_H;
+        y += r.h;
+      });
+
+      let head = '<div class="tree-head" style="width:' + COL_W * 5 + 'px">';
+      for (let c = 0; c < 5; c++) head += `<div id="colh${c}" style="width:${COL_W}px">${COL_LABEL[c]}</div>`;
+      pane.innerHTML = head + '</div><div id="treeBody" style="width:' + COL_W * 5 + 'px;height:' + y + 'px"></div>';
+      focusCol = -1;
+      renderTreeWindow();
+      syncTree();
+    }
+
+    // その行が何段必要か（同一列に重なるノードの最大数、3段まで）
+    function rowLines(mi) {
+      const m = mjmap.mj[mi];
+      const n = { 5: 1 }; // MJ列には必ず自分自身が入る
+      const bump = ch => { const c = (charLevel.get(ch) || 5); n[c] = (n[c] || 0) + 1; };
+      const seen = new Set();
+      (candByMj.get(mi) || []).forEach(c => {
+        if (c[2] === m[3] || seen.has(c[2])) return;
+        seen.add(c[2]); bump(cp(c[1]));
+      });
+      return Math.min(3, Math.max(...Object.values(n)));
+    }
+
+    // 行のノードを組み立てる。自分自身＋縮退先を、それぞれの水準の列に置く
+    function rowNodes(mi) {
+      const m = mjmap.mj[mi];
+      const base = cp(m[1]);
+      const glyph = m[2] ? base + cp(m[2]) : base; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
+      // MJ字形は自分が第1水準の字と1:1対応でも常に右端のMJ列に置く。
+      // 水準列に並ぶのは縮退先だけ、と決めておかないと同じ字が2度出て読めなくなる。
+      const nodes = [{ ch: glyph, lv: 5, sub: m[0] + (m[3] ? " " + m[3] : ""), self: true, key: base }];
+
+      const byJis = new Map();
+      (candByMj.get(mi) || []).forEach(c => {
+        if (c[2] === m[3]) return; // 自分自身への包摂は自明なので描かない
+        let t = byJis.get(c[2]);
+        if (!t) byJis.set(c[2], t = { ch: cp(c[1]), jis: c[2], src: new Set(), hop: 0, notes: [] });
+        t.src.add(c[3]);
+        if (c[4] > t.hop) t.hop = c[4];
+        if (c[5]) t.notes.push(SRC_MARK[c[3]] + ":" + c[5] + (c[4] ? ` ホップ${c[4]}` : ""));
+      });
+      byJis.forEach(t => nodes.push({
+        ch: t.ch, lv: charLevel.get(t.ch) || 5, key: t.ch, jis: t.jis,
+        sub: [...t.src].sort().map(s => SRC_MARK[s]).join("") + (t.hop > 1 ? t.hop : ""),
+        title: t.notes.join(" / ")
+      }));
+      return nodes;
+    }
+
+    function rowHtml(r, hitChar, hitTint) {
+      if (r.sec) return `<div class="tree-sec" style="top:${r.y}px;height:${SEC_H}px">　${r.sec}</div>`;
+      const nodes = rowNodes(r.mj);
+      const cols = nodes.map(n => (n.lv === 5 ? 4 : n.lv - 1));
+      const lo = Math.min(...cols), hi = Math.max(...cols);
+      const rowHit = hitChar && nodes.some(n => n.key === hitChar);
+      let h = `<div class="tree-row" style="top:${r.y}px;height:${r.h}px`
+        + (rowHit ? `;background:${hitTint}1a` : "") + '">';
+      if (lo !== hi) h += `<div class="tree-line" style="left:${lo * COL_W + COL_W / 2}px;width:${(hi - lo) * COL_W}px"></div>`;
+      const used = {};
+      nodes.forEach((n, k) => {
+        const c = cols[k];
+        used[c] = (used[c] || 0) + 1;
+        if (used[c] > 3) return; // 同一列に4つ以上来ることはほぼ無い。溢れたら落とす
+        const color = LEVEL_COLOR[n.lv] || LEVEL_COLOR[5];
+        const on = n.key === hitChar;
+        h += `<div class="tree-node${on ? " hit" : ""}"`
+          + ` style="left:${c * COL_W + COL_W / 2}px;top:${1 + (used[c] - 1) * SUB_H}px"`
+          + (n.title ? ` title="${n.title.replace(/"/g, "&quot;")}"` : "") + ">"
+          + `<span class="g" style="color:${color}${on ? ";background:" + hitTint + "40" : ""}" data-c="${n.ch}" data-k="${n.key}">${n.ch}</span>`
+          + `<span class="m">${n.self ? n.sub : '<span class="src">' + n.sub + "</span> " + n.jis}</span></div>`;
+      });
+      return h + "</div>";
+    }
+
+    // 見えている行だけDOMにする（全行は10万近くになるので実体化しない）
+    function renderTreeWindow() {
+      const pane = el("treePane"), body = el("treeBody");
+      if (!body || !treeRows.length) return;
+      const top = pane.scrollTop, h = pane.clientHeight;
+      let a = lowerBound(top - ROW_H * 4), b = a;
+      while (b < treeRows.length && treeRows[b].y < top + h + ROW_H * 4) b++;
+      if (b === a && a < treeRows.length) b = a + 1;
+      const tint = LEVEL_COLOR[charLevel.get(hoverChar)] || LEVEL_COLOR[5];
+      let out = "";
+      for (let i = a; i < b; i++) out += rowHtml(treeRows[i], hoverChar, tint);
+      body.innerHTML = out;
+    }
+
+    function lowerBound(y) {
+      let lo = 0, hi = treeRows.length - 1, r = 0;
+      while (lo <= hi) { const m = (lo + hi) >> 1; if (treeRows[m].y >= y) { r = m; hi = m - 1; } else lo = m + 1; }
+      return r;
+    }
+
+    /* ---- スクロール同期 ----
+       駆動側は「最後に触ったペイン」に固定する。両方のonscrollが互いを動かすと往復ループになるため。
+       水平方向のフォーカス移動はscrollLeftしか変えないので、scrollTopが変わった時だけ同期を走らせる。 */
+    let driver = null, guard = false, curAnchor = 0, focusCol = -1, hoverChar = null;
+    let lastListTop = -1, lastTreeTop = -1;
+
+    function paneTop(node, pane) {
+      return node.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop;
+    }
+
+    function setAnchor(i) {
+      if (i === curAnchor) return false;
+      curAnchor = i;
+      const lv = listOrder[i] ? (charLevel.get(listOrder[i].char) || 5) : 5;
+      const c = lv === 5 ? 4 : lv - 1;
+      if (c !== focusCol) {
+        focusCol = c;
+        for (let k = 0; k < 5; k++) { const e = el("colh" + k); if (e) e.classList.toggle("foc", k === c); }
+        // MJ列は常に右端に居るので、横に逃がすと肝心の行末が隠れる。
+        // 5列とも窓に収まる幅にして、フォーカスは見出しの強調だけで示す。
+        const tp = el("treePane");
+        if (COL_W * 5 > tp.clientWidth) tp.scrollLeft = Math.max(0, Math.min(COL_W * 5 - tp.clientWidth, c * COL_W + COL_W / 2 - tp.clientWidth / 2));
+      }
+      return true;
+    }
+
+    // 一覧 → ツリー
+    function syncTree() {
+      if (!mjmap || !treeRows.length || !cardEls.length) return;
+      const pane = el("kanjiContainer");
+      const top = pane.scrollTop;
+      let lo = 0, hi = cardEls.length - 1, i = 0;
+      while (lo <= hi) { const m = (lo + hi) >> 1; if (paneTop(cardEls[m], pane) <= top + 8) { i = m; lo = m + 1; } else hi = m - 1; }
+      setAnchor(i);
+      const tp = el("treePane");
+      const want = treeRows[firstRowOf[i]] ? treeRows[firstRowOf[i]].y : 0;
+      if (Math.abs(tp.scrollTop - want) > 1) { tp.scrollTop = want; lastTreeTop = tp.scrollTop; }
+      renderTreeWindow();
+    }
+
+    // ツリー → 一覧
+    function syncList() {
+      if (!mjmap || !treeRows.length) return;
+      const tp = el("treePane");
+      const r = treeRows[lowerBound(tp.scrollTop)];
+      if (!r) return;
+      setAnchor(r.anchor);
+      const pane = el("kanjiContainer"), card = cardEls[r.anchor];
+      if (card) {
+        const want = paneTop(card, pane) - 8;
+        if (Math.abs(pane.scrollTop - want) > 1) { pane.scrollTop = want; lastListTop = pane.scrollTop; }
+      }
+      renderTreeWindow();
+    }
+
+    function wireSync() {
+      const list = el("kanjiContainer"), tree = el("treePane");
+      [[list, "list"], [tree, "tree"]].forEach(([p, name]) => {
+        p.addEventListener("wheel", () => driver = name, { passive: true });
+        p.addEventListener("pointerdown", () => driver = name);
+      });
+      list.addEventListener("scroll", () => {
+        if (list.scrollTop === lastListTop) return;
+        lastListTop = list.scrollTop;
+        if (guard || driver === "tree") return;
+        guard = true; syncTree(); requestAnimationFrame(() => guard = false);
+      }, { passive: true });
+      tree.addEventListener("scroll", () => {
+        if (tree.scrollTop === lastTreeTop) return; // 水平フォーカス移動では発火させない
+        lastTreeTop = tree.scrollTop;
+        if (guard || driver === "list") { renderTreeWindow(); return; }
+        guard = true; syncList(); requestAnimationFrame(() => guard = false);
+      }, { passive: true });
+    }
+
+    // 一覧は1行に十数字並ぶので、カーソルを合わせた字のツリー行は素のままだと画面外に居る。
+    // 一覧側のホバーではツリーをその行まで送る（ツリー側のホバーでは送らない。跳ねるので）
+    function setHover(ch, cardIdx) {
+      if (ch !== hoverChar) hoverChar = ch;
+      if (!mjmap || !document.body.classList.contains("tree-on")) return;
+      if (cardIdx != null) {
+        setAnchor(cardIdx);
+        const tp = el("treePane"), want = treeRows[firstRowOf[cardIdx]];
+        if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
+      }
+      renderTreeWindow();
+    }
+    // 字の上に来た時だけ更新する。隙間を通っただけで消えると、
+    // 再描画でカーソル下の要素が入れ替わるたびにハイライトが点滅してしまう。
+    el("kanjiContainer").addEventListener("mouseover", e => {
+      const c = e.target.closest(".card");
+      if (c) setHover(c.dataset.char, +c.dataset.i);
+    });
+    el("kanjiContainer").addEventListener("mouseleave", () => setHover(null));
+    el("treePane").addEventListener("mouseover", e => {
+      const n = e.target.closest(".tree-node");
+      if (n) setHover(n.querySelector(".g").dataset.k);
+    });
+    el("treePane").addEventListener("mouseleave", () => setHover(null));
+
+    el("treeToggle").addEventListener("click", () => {
+      const on = document.body.classList.toggle("tree-on");
+      el("treeToggle").textContent = on ? "ツリー ON" : "ツリー OFF";
+      if (on) { curAnchor = -1; lastListTop = lastTreeTop = -1; syncTree(); }
+    });
+
+    el("fontBadge").addEventListener("click", () => {
+      hasIPAmjFont = !hasIPAmjFont;
+      updateFontBadge();
+    });
+
+    // ツリーの字をクリックしたら一覧のその字へ飛ぶ
+    el("treePane").addEventListener("click", e => {
+      const g = e.target.closest(".g");
+      if (g) jumpToChar(g.dataset.k);
+    });
+
+    // 一覧の該当カードへスクロールし、ツリーもその行に合わせる。見つかれば true
+    function jumpToChar(ch) {
+      const i = listOrder.findIndex(it => it.char === ch);
+      if (i < 0) return false;
+      if (!document.body.classList.contains("tree-on")) el("treeToggle").click();
+      driver = "list";
+      const pane = el("kanjiContainer");
+      pane.scrollTop = paneTop(cardEls[i], pane) - 8;
+      lastListTop = pane.scrollTop;
+      curAnchor = -1;
+      setHover(ch, i); // 一覧は横に十数字並ぶのでアンカーは自動判定に任せず対象に固定する
+      return true;
+    }
+
+    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 の4通りを受ける ---- */
+    function resolveQuery(q) {
+      q = q.trim();
+      if (!q) return null;
+      let m;
+      if (m = /^MJ(\d{6})$/i.exec(q)) { const i = mjIndex.get("MJ" + m[1]); return i == null ? null : cp(mjmap.mj[i][1]); }
+      if (m = /^U\+?([0-9a-f]{4,6})$/i.exec(q)) return String.fromCodePoint(parseInt(m[1], 16));
+      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
+        const k = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+        return jisChar.get(k) || null;
+      }
+      return Array.from(q)[0];
+    }
+
+    function runSearch() {
+      const ch = resolveQuery(el("mjSearch").value);
+      const st = el("mjmapStatus");
+      if (!ch) { st.textContent = "見つかりませんでした"; return; }
+      const mjs = mjByChar.get(ch) || [];
+      const into = mjs.filter(i => (candByMj.get(i) || []).some(c => cp(c[1]) === ch)).length;
+      const outOf = new Set();
+      mjs.forEach(i => (candByMj.get(i) || []).forEach(c => { if (cp(c[1]) !== ch) outOf.add(c[2]); }));
+      st.textContent = `「${ch}」 縮退元 ${into}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
+
+      if (!jumpToChar(ch)) st.textContent += " ※一覧に無い字";
+    }
+    el("mjSearch").addEventListener("keydown", e => { if (e.key === "Enter") runSearch(); });
+
     // 共通ユーティリティ
     function copyText(text, label) {
       navigator.clipboard.writeText(text).then(() => {
@@ -683,6 +1140,14 @@
       buildRadicalListboxes();
       renderKanji();
       renderHentaigana();
+      checkIPAmjFont();
+      wireSync();
+      // 前回読ませた mjmap.json が残っていればファイル選択なしで復元する。
+      // 無ければ同じ場所に置かれた mjmap.json を取りに行く（file:// では失敗するのでその時は手動選択）
+      idb('readonly', s => s.get('mjmap'))
+        .then(t => t || fetch('mjmap.json').then(r => r.ok ? r.text() : null))
+        .then(t => { if (t) loadMjmap(t); })
+        .catch(() => {});
     };
   </script>
 </body>
