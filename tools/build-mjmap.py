@@ -31,8 +31,9 @@ SRC_KEYS = [
 KYUUJITAI_MD = 'docs/jyouyou-kyuujitai.md'
 BIT_KYUUJITAI = 1 << 5
 
-# 使う列だけ拾う (C:MJ文字図形名 D:対応するUCS F:実装したMoji_JohoコレクションIVS N:X0213)
-COLS = {'C': 'mj', 'D': 'ucs', 'F': 'ivs', 'N': 'x0213'}
+# 使う列だけ拾う
+# (C:MJ文字図形名 D:対応するUCS F:実装したMoji_JohoコレクションIVS N:X0213 P:X0213 包摂区分)
+COLS = {'C': 'mj', 'D': 'ucs', 'F': 'ivs', 'N': 'x0213', 'P': 'houhsetsu'}
 
 IVS_RE = re.compile(r'^([0-9A-F]{4,5})_([0-9A-F]{5})$')
 
@@ -107,13 +108,17 @@ def read_kyuujitai(path):
 def build(xlsx_path, shrink_path, kyuujitai):
     with zipfile.ZipFile(xlsx_path) as z:
         shared = read_shared_strings(z)
-        mj, index_of, own = [], {}, {}
+        mj, index_of, own, rep_of = [], {}, {}, {}
         for r in read_rows(z, shared):
             name = r['mj']
             ucs = r.get('ucs', '')
             index_of[name] = len(mj)
             if r.get('x0213'):
                 own[name] = r['x0213']
+                # 包摂区分0 = その面区点のJIS例示字形。同じ面区点に縮退するMJを並べるとき、
+                # 字形がその面区点そのものであるMJを先頭に出すために持っておく。
+                if r.get('houhsetsu') == '0':
+                    rep_of[name] = r['x0213']
             mj.append([int(name[2:]), ucs[2:] if ucs else '',
                        ivs_selector(r.get('ivs'), ucs, name)])
 
@@ -170,6 +175,8 @@ def build(xlsx_path, shrink_path, kyuujitai):
         },
         'jis': [[code, jis_ucs[code]] for code in jis],
         'mj': mj,
+        # [MJのindex, 面区点のindex]。そのMJがその面区点のJIS例示字形であることを示す
+        'rep': sorted([index_of[n], jis_idx[c]] for n, c in rep_of.items() if c in jis_idx),
         'cand': [[i, j, b] for (i, j), b in sorted(pairs.items())],
     }
 
@@ -192,7 +199,8 @@ def main():
           f"面区点 {len(data['jis']):,} / 縮退先なしMJ {len(data['mj']) - with_cand:,} / "
           f"IVSあり {sum(1 for m in data['mj'] if m[2]):,}\n"
           f"  根拠: 規格(包摂・統合) {t[0]:,} / 法令・告示 {t[1]:,} / 辞書・類推のみ {t[2]:,}"
-          f" / うち常用漢字表の新旧字体 {sum(1 for c in data['cand'] if c[2] & BIT_KYUUJITAI):,}")
+          f" / うち常用漢字表の新旧字体 {sum(1 for c in data['cand'] if c[2] & BIT_KYUUJITAI):,}"
+          f"\n  JIS例示字形(X0213 包摂区分0) {len(data['rep']):,}")
 
 
 if __name__ == '__main__':

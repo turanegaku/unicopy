@@ -125,9 +125,9 @@
     /* 根拠の段を線種で示す。実線=規格の包摂・統合、破線=法令の読み替え、点線=辞書・類推 */
     .tree-line.t1 { height: 0; background: none; border-top: 1px dashed #b0bec5; }
     .tree-line.t2 { height: 0; background: none; border-top: 1px dotted #90a4ae; }
-    /* 常用漢字表の新旧字体。法令・告示のうち、旧字体を新字体に潰す関係だけを色で分ける */
-    .tree-line.kj { border-top-color: #e67e22; }
-    .tree-line.t0.kj { background: #e67e22; }
+    /* 常用漢字表の新旧字体。破線だと埋もれるので、橙の実線で描く（縦の幹も同じ） */
+    .tree-line.kj { height: 1px; border-top: none; background: #e67e22; }
+    .tree-bus.kj { width: 1px; border-left: none; background: #e67e22; }
     .tree-bus.t1 { width: 0; background: none; border-left: 1px dashed #cfd8dc; }
     .tree-bus.t2 { width: 0; background: none; border-left: 1px dotted #b0bec5; }
     .tree-box { position: absolute; border: 1px solid #cfd8dc; border-radius: 5px; background: rgba(255,255,255,.5); }
@@ -790,12 +790,13 @@
     const candByMj = new Map();   // MJ index -> [面区点の添字]
     const mjIndex = new Map();    // "MJ000089" -> index
     const jisChar = new Map();    // "1-18-81" -> "会"
+    const repOf = new Map();      // MJ index -> その面区点のJIS例示字形になっている面区点のindex
     const charJis = new Map();    // "会" -> "1-18-81"
     let jisCh = [];               // 面区点の添字 -> 文字
 
     // 一覧の描画順。ツリーの行順と縦スクロール同期の基準になる
     let listOrder = [], cardEls = [];
-    let treeRows = [], treeGroups = [], firstRowOf = [];
+    let treeRows = [], treeGroups = [], firstRowOf = [], drawnAt = new Map();
 
     const el = id => document.getElementById(id);
     const cp = hex => hex ? String.fromCodePoint(parseInt(hex, 16)) : "";
@@ -857,6 +858,8 @@
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
       mjmap.mj.forEach((m, i) => mjIndex.set(mjName(m[0]), i));
+      repOf.clear();
+      (mjmap.rep || []).forEach(([mi, ji]) => repOf.set(mi, ji));
       jisCh = mjmap.jis.map(j => cp(j[1]));
       mjmap.jis.forEach((j, k) => {
         jisChar.set(j[0], jisCh[k]);
@@ -927,7 +930,11 @@
       if (!mjmap) return 0;
       const items = [];
       mjmap.mj.forEach((m, i) => {
-        if (candByMj.has(i) || !m[1]) return;
+        if (!m[1]) return;
+        // 縮退先が一覧に無い字（々〆〻 のような記号）しか無いMJは、どの群にも現れないので外字へ回す。
+        // charLevel は第1〜4水準だけを持つ（外字は入れない）ので、この has() は水準字かどうかを見る
+        const to = candByMj.get(i);
+        if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
         const ch = cp(m[1]) + (m[2] ? cp(m[2]) : "");
         if (targetChars !== null && !targetChars.has(ch)) return;
         items.push({ char: ch, mj: mjName(m[0]), code: parseInt(m[1], 16) });
@@ -954,7 +961,6 @@
         card.dataset.i = listOrder.length;
         card.onclick = () => copyText(it.char, `「${it.char}」`);
         grid.appendChild(card);
-        if (!charLevel.has(it.char)) charLevel.set(it.char, 5);
         listOrder.push({ char: it.char, level: 5, mj: it.mj });
         cardEls.push(card);
       });
@@ -975,10 +981,17 @@
 
       treeRows = []; treeGroups = []; firstRowOf = [];
       let y = 0;
+      const shownMJ = new Set();
+      drawnAt.clear();
       listOrder.forEach((it, i) => {
         firstRowOf[i] = treeRows.length;
         const mjs = (mjByChar.get(it.char) || []).slice();
         if (!mjs.length) return;
+        // 既に前の群で描いたMJだけで出来ている群は描かない。
+        // 惡(1-56-08) の群は 悪(1-16-13) の群と同じMJ・同じ縮退先を繰り返すだけなので、
+        // 縮退が集まる側（一覧で先に来る方）に一本化する。一覧側に行の無いカードが出るのは許容。
+        if (mjs.every(m => shownMJ.has(m))) return;
+        mjs.forEach(m => shownMJ.add(m));
 
         // 字形が一致するMJ（自身の面区点がこの字）を先に見て、その字に0番を振る
         const isOwn = m => cp(mjmap.mj[m][1]) === it.char;
@@ -1006,9 +1019,15 @@
         // 虼 のように「蝱 を経ずに直接 虻 へ行く」MJが上にまとまる。
         // 同じ組み合わせの中では、その組み合わせで増える字を自分の字形として持つMJを先頭に。
         // 惡 の枝の先頭が 䛩 になっていると、悪—惡 の線が 䛩 の行に出て読めない。
+        // さらに、その面区点のJIS例示字形（X0213 包摂区分0）であるMJを優先する。
+        // 悁 は MJ011568(IVS E0102) と MJ011569(IVS E0101) が同じ組み合わせを持つが、
+        // 1-55-90 に割り当てられているのは 69 の方なので、そちらが先頭に来る。
         const pop = b => (b >>> 0).toString(2).replace(/0/g, "").length;
-        const selfTarget = m => { const c = cp(mjmap.mj[m][1]); return byCh.has(c) && (setOf.get(m) & (1 << byCh.get(c).idx)) ? 0 : 1; };
+        const hasTarget = (m, ch) => { const t = byCh.get(ch); return t && (setOf.get(m) & (1 << t.idx)) ? 0 : 1; };
+        const repRank = m => { const j = repOf.get(m); return j == null ? 1 : hasTarget(m, jisCh[j]); };
+        const selfTarget = m => hasTarget(m, cp(mjmap.mj[m][1]));
         mjs.sort((a, b) => pop(setOf.get(a)) - pop(setOf.get(b)) || setOf.get(a) - setOf.get(b)
+          || repRank(a) - repRank(b)
           || selfTarget(a) - selfTarget(b)
           || (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
@@ -1020,6 +1039,7 @@
           branches.push({ bits: setOf.get(m), first: k, last: k });
         });
 
+        const drawn = new Set();
         branches.forEach((br, bi) => {
           br.parent = -1;
           for (let j = bi - 1; j >= 0; j--) {
@@ -1027,8 +1047,11 @@
           }
           // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる
           if (br.parent < 0 && bi > 0) br.parent = 0;
+          // 親から増えたぶん。ただし既に他の枝が描いた字は二度描かない
+          // （包含関係が無い枝どうしだと、親を枝0に寄せた結果ぶつかることがある）
           const base = bi === 0 ? 0 : branches[br.parent].bits;
-          br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)));
+          br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)) && !drawn.has(t.idx));
+          br.delta.forEach(t => drawn.add(t.idx));
           // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
           br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
@@ -1045,8 +1068,13 @@
           br.lines = Math.max(1, ...br.delta.map(t => slot[t.col]));
           const xs = br.delta.map(t => t.col * COL_W + COL_W / 2);
           br.delta.forEach((t, k) => { t.x = xs[k]; });
-          br.loX = Math.min(...xs);
-          br.spineX = (br.loX + Math.max(...xs)) / 2;
+          if (!xs.length) {
+            // 増える字が無い枝（既に描かれている字だけで出来ている）は親の幹にそのまま下げる
+            br.loX = br.spineX = br.parent >= 0 ? branches[br.parent].spineX : COL_W / 2;
+          } else {
+            br.loX = Math.min(...xs);
+            br.spineX = (br.loX + Math.max(...xs)) / 2;
+          }
         });
         branches.forEach(br => {
           // 幹は自分の行と、自分にぶら下がる枝の先頭行まで通す
@@ -1054,7 +1082,11 @@
           branches.forEach(c => { if (c.parent === branches.indexOf(br) && c.first > br.to) br.to = c.first; });
         });
 
-        branches.forEach((br, bi) => br.delta.forEach(t => { t.branch = bi; }));
+        branches.forEach((br, bi) => br.delta.forEach(t => {
+          t.branch = bi;
+          // その字が実際に描かれている行。群を畳んだ字へ飛ぶときの行き先になる
+          if (!drawnAt.has(t.ch)) drawnAt.set(t.ch, treeRows.length + br.first);
+        }));
         const gi = treeGroups.length;
         treeGroups.push({ branches });
         const brOf = [];
@@ -1118,11 +1150,14 @@
       h += `<div class="tree-line t${own}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
 
       // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
-      g.branches.forEach(b2 => {
+      g.branches.forEach((b2, bi) => {
         if (r.k < b2.first || r.k > b2.to) return;
         const from = r.k === b2.first ? r.ex * SUB_H + 28 : 0;
         const to = r.k === b2.to ? lineY : r.h;
-        if (to > from) h += `<div class="tree-bus t${b2.tier}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
+        // この行から始まる子の枝が新旧字体なら、そこへ降ろす区間も橙にする
+        const child = g.branches.find(c => c.parent === bi && c.first === r.k);
+        const kj = !!(child && child.kj);
+        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj ? " kj" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
       });
 
       if (r.k === br.first) {
@@ -1306,7 +1341,10 @@
       hoverChar = ch;
       curAnchor = -1;
       setAnchor(i); // 一覧は横に十数字並ぶのでアンカーは自動判定に任せず対象に固定する
-      const tp = el("treePane"), want = treeRows[firstRowOf[i]];
+      // 群を畳んだ字は、その字が実際に描かれている群の行へ送る
+      let want = treeRows[firstRowOf[i]];
+      if (!want || listOrder[want.anchor].char !== ch) want = treeRows[drawnAt.get(ch)] || want;
+      const tp = el("treePane");
       if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
       renderTreeWindow();
 
