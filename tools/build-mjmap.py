@@ -26,6 +26,10 @@ SRC_KEYS = [
     '辞書類等による関連字',
     '読み・字形による類推',
 ]
+# bit5 は縮退マップ外の情報。常用漢字表(平成22年内閣告示第2号)の「いわゆる康熙字典体」で、
+# 旧字体を実装するMJから新字体の面区点へ向かうエッジに立てる。出典と一覧は下記に置いてある。
+KYUUJITAI_MD = 'docs/jyouyou-kyuujitai.md'
+BIT_KYUUJITAI = 1 << 5
 
 # 使う列だけ拾う (C:MJ文字図形名 D:対応するUCS F:実装したMoji_JohoコレクションIVS N:X0213)
 COLS = {'C': 'mj', 'D': 'ucs', 'F': 'ivs', 'N': 'x0213'}
@@ -80,7 +84,27 @@ def ivs_selector(raw, ucs, mj):
     return m.group(2)
 
 
-def build(xlsx_path, shrink_path):
+def read_kyuujitai(path):
+    """対照表ブロック（```tsv ... ```）から (旧面区点, 新面区点) を読む。"""
+    try:
+        with open(path, encoding='utf-8') as f:
+            body = f.read()
+    except FileNotFoundError:
+        print(f'warn: {path} が無いので新旧字体ビットは立てない', file=sys.stderr)
+        return []
+    m = re.search(r'```tsv\n(.*?)```', body, re.S)
+    if not m:
+        print(f'warn: {path} に tsv ブロックが無い', file=sys.stderr)
+        return []
+    out = []
+    for line in m.group(1).splitlines():
+        f4 = line.split('\t')
+        if len(f4) == 4 and f4[2] != '—' and f4[3] != '—':
+            out.append((f4[2], f4[3]))
+    return out
+
+
+def build(xlsx_path, shrink_path, kyuujitai):
     with zipfile.ZipFile(xlsx_path) as z:
         shared = read_shared_strings(z)
         mj, index_of, own = [], {}, {}
@@ -123,6 +147,21 @@ def build(xlsx_path, shrink_path):
     if missing:
         print(f'warn: 自身の面区点が候補に無いMJが {len(missing)}件: {missing[:5]}', file=sys.stderr)
 
+    # 旧字体の面区点に包摂されるMJが、新字体の面区点にも縮退している組にビットを立てる
+    by_mj = {}
+    for (i, j), b in pairs.items():
+        by_mj.setdefault(i, []).append((j, b))
+    n_marked = 0
+    for old, new in kyuujitai:
+        oi, ni = jis_idx.get(old), jis_idx.get(new)
+        if oi is None or ni is None:
+            continue
+        for i, es in by_mj.items():
+            if any(j == oi and b & 1 for j, b in es) and any(j == ni for j, b in es):
+                pairs[(i, ni)] |= BIT_KYUUJITAI
+                n_marked += 1
+    print(f'新旧字体ビット: {n_marked:,} エッジ ({len(kyuujitai):,} 組から)', file=sys.stderr)
+
     return {
         'meta': {
             'mji': xlsx_path.split('/')[-1],
@@ -143,7 +182,7 @@ def main():
     p.add_argument('-o', '--out', default='mjmap.json')
     a = p.parse_args()
 
-    data = build(a.xlsx, a.shrink)
+    data = build(a.xlsx, a.shrink, read_kyuujitai(KYUUJITAI_MD))
     with open(a.out, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
 
@@ -152,7 +191,8 @@ def main():
     print(f"{a.out}: MJ {len(data['mj']):,} / 縮退エッジ {len(data['cand']):,} / "
           f"面区点 {len(data['jis']):,} / 縮退先なしMJ {len(data['mj']) - with_cand:,} / "
           f"IVSあり {sum(1 for m in data['mj'] if m[2]):,}\n"
-          f"  根拠: 規格(包摂・統合) {t[0]:,} / 法令・告示 {t[1]:,} / 辞書・類推のみ {t[2]:,}")
+          f"  根拠: 規格(包摂・統合) {t[0]:,} / 法令・告示 {t[1]:,} / 辞書・類推のみ {t[2]:,}"
+          f" / うち常用漢字表の新旧字体 {sum(1 for c in data['cand'] if c[2] & BIT_KYUUJITAI):,}")
 
 
 if __name__ == '__main__':

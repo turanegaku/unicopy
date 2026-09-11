@@ -79,26 +79,38 @@
     /* ================= 縮退ツリー窓 ================= */
     /* ツリーOFFのときはページスクロールのまま＝従来の index.html と同じ挙動。
        ONのときだけ一覧を独立したスクロールコンテナにしてツリーと縦位置を同期させる。 */
-    .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
-    .tree-bar input[type="text"] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; min-width: 210px; }
+    .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    .bar-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .bar-label { font-weight: bold; color: #95a5a6; font-size: 0.72rem; letter-spacing: 1px; }
+    .find-row { display: flex; gap: 10px; align-items: center; width: 100%; flex-wrap: wrap; }
+    .find-row input[type="text"] { padding: 7px 9px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; flex: 1; min-width: 200px; font-size: 0.95rem; }
+    .find-row .status { color: #7f8c8d; font-size: 0.85rem; }
+    .legend { flex-basis: 100%; font-size: 0.7rem; color: #95a5a6; border-top: 1px solid #f0f0f0; padding-top: 7px; }
+    .legend a { color: #95a5a6; }
+    .legend b { color: #7f8c8d; }
+    .legend b.kj { color: #e67e22; }
+    .legend .credit { color: #bdc3c7; }
+    .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
+    .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
     .switch { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 9px; border: 1px solid #ccc; border-radius: 5px; cursor: pointer; user-select: none; }
     .switch input { width: 15px; height: 15px; accent-color: #3498db; cursor: pointer; margin: 0; }
     .switch:hover { background: #ebf5fb; }
     .switch:has(input:checked) { background: #ebf5fb; border-color: #3498db; color: #2980b9; font-weight: bold; }
     .switch:has(input:disabled) { color: #bdc3c7; border-color: #e4e4e4; cursor: default; background: none; }
-    .tree-bar .status { color: #7f8c8d; margin-left: auto; }
-    .tree-bar .credit { flex-basis: 100%; font-size: 0.7rem; color: #aaa; }
-    .tree-bar .credit a { color: #aaa; }
-    .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
-    .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
-    .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
 
-    #kanjiPanes { display: flex; gap: 12px; align-items: flex-start; }
+    #kanjiPanes { display: flex; gap: 12px; align-items: stretch; }
     #kanjiContainer { flex: 1; min-width: 0; }
+    #treePane { display: none; flex: 0 0 470px; overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; }
+
+    /* ツリーONのときは2つのペインを sticky で画面いっぱいに貼り付ける。
+       ページ自体は普通にスクロールし、ヘッダと部首フィルタは上へ流れて消える。
+       そのぶんペインは常に画面の高さいっぱいを使える。 */
+    body.tree-on #kanjiPanes { position: sticky; top: 8px; height: calc(100vh - 16px); }
+    body.tree-on #radicalListboxes { max-height: 40vh; overflow-y: auto; }
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
-    body.tree-on #kanjiContainer { height: calc(100vh - 210px); overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
-    #treePane { display: none; flex: 0 0 470px; height: calc(100vh - 210px); overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; }
+    body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
 
     .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 0.68rem; color: #7f8c8d; }
@@ -113,6 +125,9 @@
     /* 根拠の段を線種で示す。実線=規格の包摂・統合、破線=法令の読み替え、点線=辞書・類推 */
     .tree-line.t1 { height: 0; background: none; border-top: 1px dashed #b0bec5; }
     .tree-line.t2 { height: 0; background: none; border-top: 1px dotted #90a4ae; }
+    /* 常用漢字表の新旧字体。法令・告示のうち、旧字体を新字体に潰す関係だけを色で分ける */
+    .tree-line.kj { border-top-color: #e67e22; }
+    .tree-line.t0.kj { background: #e67e22; }
     .tree-bus.t1 { width: 0; background: none; border-left: 1px dashed #cfd8dc; }
     .tree-bus.t2 { width: 0; background: none; border-left: 1px dotted #b0bec5; }
     .tree-box { position: absolute; border: 1px solid #cfd8dc; border-radius: 5px; background: rgba(255,255,255,.5); }
@@ -140,23 +155,26 @@
   <!-- ================= 漢字モード ================= -->
   <div id="kanji" class="tab-content active">
     <div class="tree-bar">
-      <label>縮退データ: <input type="file" id="mjmapInput" accept=".json"></label>
-      <label class="switch"><input type="checkbox" id="treeToggle" disabled> 縮退ツリーを表示</label>
-      <span class="tiers">根拠:
-        <label class="switch mini" title="JIS包摂規準・UCS統合規則。規格が同じ文字と定めたもの（実線）"><input type="checkbox" class="tier" data-t="0" checked> 規格</label>
-        <label class="switch mini" title="法務省戸籍法関連通達・告示582号別表第四。別の文字への行政上の読み替え（破線）"><input type="checkbox" class="tier" data-t="1" checked> 法令・告示</label>
-        <label class="switch mini" title="辞書類等による関連字・読み字形による類推。IPAの一意変換表でも採用されていない参考情報（点線）"><input type="checkbox" class="tier" data-t="2"> 辞書・類推</label>
-      </span>
-      <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81" disabled>
-      <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
-      <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
-      <!-- MJ縮退マップ/MJ文字情報一覧表は CC BY-SA 2.1 JP。利用条件として出典表示が必要 -->
-      <span class="credit">縮退データ: 文字情報基盤
-        <a href="https://moji.or.jp/mojikiban/">MJ文字情報一覧表</a> ／
-        <a href="https://moji.or.jp/mojikiban/map/">MJ縮退マップ</a>
-        (IPA, CC BY-SA 2.1 JP)</span>
+      <div class="bar-group">
+        <span class="bar-label">設定</span>
+        <label>データ <input type="file" id="mjmapInput" accept=".json"></label>
+        <label class="switch"><input type="checkbox" id="treeToggle" disabled> 縮退ツリー</label>
+        <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
+      </div>
+      <div class="bar-group">
+        <span class="bar-label">縮退の根拠</span>
+        <label class="switch" title="常用漢字表の「いわゆる康熙字典体」。旧字体を新字体に潰す関係で、橙の実線で描く"><input type="checkbox" id="tierKyuu" checked> 新旧字体</label>
+        <label class="switch" title="戸籍法関連通達・告示582号のうち新旧字体以外。人名異体字・俗字・誤字が中心で、灰の破線で描く"><input type="checkbox" id="tierLaw"> その他の法令・告示</label>
+      </div>
+      <div class="legend"><b>実線</b>=規格（同じ文字）　<b class="law">破線</b>=法令・告示（読み替え）　<b class="kj">橙</b>=<a href="docs/jyouyou-kyuujitai.md">常用漢字表の新旧字体</a><span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
     </div>
-    <div class="search-container" id="radicalListboxes"></div>
+    <div class="search-container" id="radicalListboxes">
+      <div class="find-row">
+        <span class="bar-label">検索</span>
+        <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81" disabled>
+        <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
+      </div>
+    </div>
     <div id="kanjiPanes">
       <div id="kanjiContainer"></div>
       <div id="treePane"><div class="tree-empty">縮退データ未読込</div></div>
@@ -785,7 +803,10 @@
     const mjName = num => "MJ" + String(num).padStart(6, "0");
     // 0=規格(JIS包摂規準・UCS統合規則) 1=法令・告示(戸籍法通達/582号) 2=辞書・類推のみ
     const tierOf = bits => bits & 1 ? 0 : (bits & 6 ? 1 : 2);
-    const tierOn = [true, true, false]; // 辞書・類推はデータには持つが既定では描かない
+    // 規格は常時ON、辞書・類推は常時OFF（データには持つが描かない）。
+    // 法令・告示は「常用漢字表の新旧字体」とそれ以外で別々に切り替える。
+    const showKyuu = { law: false, kyuu: true };
+    const BIT_KYUUJITAI = 1 << 5; // 常用漢字表のいわゆる康熙字典体（docs/jyouyou-kyuujitai.md）
 
     // ---- IndexedDB（mjmap.json は 4〜5MB あり localStorage には入らない） ----
     function idb(mode, fn) {
@@ -855,16 +876,19 @@
       candByMj.clear(); mjByChar.clear();
       mjmap.cand.forEach(([mi, ji, bits]) => {
         const t = tierOf(bits);
-        if (!tierOn[t]) return;
-        push(candByMj, mi, [ji, t]);
+        if (t === 2) return;
+        const kj = !!(bits & BIT_KYUUJITAI);
+        if (t === 1 && !(kj ? showKyuu.kyuu : showKyuu.law)) return;
+        push(candByMj, mi, [ji, t, kj]);
         push(mjByChar, jisCh[ji], mi);
       });
     }
 
-    document.querySelectorAll(".tier").forEach(box => box.addEventListener("change", e => {
-      tierOn[+e.target.dataset.t] = e.target.checked;
-      if (mjmap) { buildEdges(); renderKanji(); }
-    }));
+    [["tierLaw", "law"], ["tierKyuu", "kyuu"]].forEach(([id, key]) =>
+      el(id).addEventListener("change", e => {
+        showKyuu[key] = e.target.checked;
+        if (mjmap) { buildEdges(); renderKanji(); }
+      }));
 
     el("mjmapInput").addEventListener("change", e => {
       const f = e.target.files[0];
@@ -961,15 +985,17 @@
         mjs.sort((a, b) => (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
         const byCh = new Map(), setOf = new Map(), tierOfRow = new Map(), tierOfEdge = new Map();
+        const kjEdge = new Set();
         mjs.forEach(m => {
           let b = 0, worst = 0;
-          (candByMj.get(m) || []).forEach(([ji, ti]) => {
+          (candByMj.get(m) || []).forEach(([ji, ti, kj]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
             if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], col: (charLevel.get(ch) || 5) - 1, idx: byCh.size });
             b |= 1 << t.idx;
             if (ti > worst) worst = ti;          // 行の線はその行がぶら下がる一番弱い根拠に合わせる
             tierOfEdge.set(m + ":" + t.idx, ti);
+            if (kj) kjEdge.add(m + ":" + t.idx);
           });
           setOf.set(m, b);
           tierOfRow.set(m, worst);
@@ -978,8 +1004,12 @@
 
         // 縮退先が少ない順。同数なら組み合わせ順 → 字形一致 → MJ番号。
         // 虼 のように「蝱 を経ずに直接 虻 へ行く」MJが上にまとまる。
+        // 同じ組み合わせの中では、その組み合わせで増える字を自分の字形として持つMJを先頭に。
+        // 惡 の枝の先頭が 䛩 になっていると、悪—惡 の線が 䛩 の行に出て読めない。
         const pop = b => (b >>> 0).toString(2).replace(/0/g, "").length;
+        const selfTarget = m => { const c = cp(mjmap.mj[m][1]); return byCh.has(c) && (setOf.get(m) & (1 << byCh.get(c).idx)) ? 0 : 1; };
         mjs.sort((a, b) => pop(setOf.get(a)) - pop(setOf.get(b)) || setOf.get(a) - setOf.get(b)
+          || selfTarget(a) - selfTarget(b)
           || (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
         // 同じ組み合わせの連なりを1つの枝にする
@@ -1001,6 +1031,13 @@
           br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)));
           // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
           br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
+          // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
+          const up = targets.filter(t => (base & (1 << t.idx)));
+          br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
+          br.kj = false;
+          for (let k = br.first; k <= br.last && !br.kj; k++) {
+            br.kj = up.some(t => kjEdge.has(mjs[k] + ":" + t.idx));
+          }
 
           // 増えたぶんの字を列ごとに縦へ積み、枠の中心を幹の位置にする
           const slot = {};
@@ -1045,6 +1082,12 @@
         + `<span class="m"${copy ? ` data-copy="${copy}" title="クリックでコピー"` : ""}>${meta}</span></div>`;
     }
 
+    // その行からその縮退先へのエッジの根拠の段
+    function rowTier(mi, t) {
+      for (const [ji, ti] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return ti;
+      return 0;
+    }
+
     function rowHtml(r, hit, tint) {
       const g = treeGroups[r.g];
       const br = g.branches[r.b];
@@ -1063,22 +1106,16 @@
       let h = `<div class="tree-row${r.top ? " grp" : ""}" style="top:${r.y}px;height:${r.h}px`
         + (on ? `;background:${tint}1a` : "") + '">';
 
-      // 横線は繋がる縮退先ごとに区切り、その区間を通って届く縮退先の根拠の線種で描く。
+      // 横線。親の縮退先への繋がりは枝の入れ子（縦の幹）で表しているので、
+      // 親まで戻る線分を引くのは枝の先頭行だけ。2行目以降で引くと、上に幹が無い位置から
+      // 線が生えて「その行が直接そこへ縮退している」ように見えてしまう。
       // 秌(MJ019007) なら MJ〜秌 は包摂なので実線、秌〜秋 は戸籍法通達なので破線になる。
-      const pts = [];
-      (candByMj.get(r.mj) || []).forEach(([ji, ti]) => {
-        const t = g.byCh.get(jisCh[ji]);
-        if (!t) return;
-        const x = g.branches[t.branch].spineX;
-        const e = pts.find(q => q.x === x);
-        if (e) { if (ti > e.tier) e.tier = ti; } else pts.push({ x, tier: ti });
-      });
-      pts.sort((a, b) => a.x - b.x);
-      if (parent && r.k === br.first && (!pts.length || parent.spineX < pts[0].x)) pts.unshift({ x: parent.spineX, tier: br.tier });
-      pts.forEach((q, k) => {
-        const to = k + 1 < pts.length ? pts[k + 1].x : mjX;
-        if (to > q.x) h += `<div class="tree-line t${q.tier}" style="left:${q.x}px;top:${lineY}px;width:${to - q.x}px"></div>`;
-      });
+      const own = Math.max(0, ...br.delta.map(t => rowTier(r.mj, t)));
+      if (r.k === br.first && parent && parent.spineX < br.loX) {
+        h += `<div class="tree-line t${br.upTier}${br.kj ? " kj" : ""}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
+      }
+      const from = r.k === br.first ? br.loX : br.spineX;
+      h += `<div class="tree-line t${own}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
 
       // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
       g.branches.forEach(b2 => {
@@ -1272,6 +1309,12 @@
       const tp = el("treePane"), want = treeRows[firstRowOf[i]];
       if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
       renderTreeWindow();
+
+      // ペインは部首フィルタの下にあるので、画面に入っていなければページごと送る
+      const box = el("kanjiPanes").getBoundingClientRect();
+      if (box.top > 40 || box.bottom < 120) {
+        window.scrollTo({ top: window.scrollY + box.top - 8, behavior: "smooth" });
+      }
 
       if (flashed) flashed.classList.remove("flash");
       clearTimeout(flashTimer);
