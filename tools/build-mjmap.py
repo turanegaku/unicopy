@@ -5,15 +5,20 @@
 
 xlsx は字形(IVS)を、縮退マップは縮退グラフを持つ。両者は MJ文字図形名で 1:1 に対応する。
 標準ライブラリのみで読む。この xlsx は strict OOXML なので名前空間が通常と違う点に注意。
+
+縮退の根拠は SRC_KEYS の並びのビットで1エッジ1つに畳む。ホップ数は落とす。
+根拠が違うだけの同じ縮退先が最大8本並ぶのを潰しつつ、
+「規格の包摂か、法令の読み替えか、辞書の参考か」は残す必要があるため。
+MJ自身の面区点は別枠では持たない ―― 必ず包摂規準のエッジとして候補に含まれる（検証済み）。
 """
 import argparse, json, re, sys, zipfile
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import date
 
 # strict OOXML。通常の schemas.openxmlformats.org ではない
 NS = '{http://purl.oclc.org/ooxml/spreadsheetml/main}'
 
-# 縮退マップのキー。出力の src はこの順序に対応する
 SRC_KEYS = [
     'JIS包摂規準・UCS統合規則',
     '法務省告示582号別表第四',
@@ -45,8 +50,7 @@ def read_rows(z, shared):
             continue
         rec = {}
         for c in el.iter(NS + 'c'):
-            col = c.get('r').rstrip('0123456789')
-            name = COLS.get(col)
+            name = COLS.get(c.get('r').rstrip('0123456789'))
             if not name:
                 continue
             v = c.find(NS + 'v')
@@ -79,32 +83,45 @@ def ivs_selector(raw, ucs, mj):
 def build(xlsx_path, shrink_path):
     with zipfile.ZipFile(xlsx_path) as z:
         shared = read_shared_strings(z)
-        mj = []
-        index_of = {}
+        mj, index_of, own = [], {}, {}
         for r in read_rows(z, shared):
             name = r['mj']
             ucs = r.get('ucs', '')
             index_of[name] = len(mj)
-            mj.append([name, ucs[2:] if ucs else '',
-                       ivs_selector(r.get('ivs'), ucs, name), r.get('x0213', '')])
+            if r.get('x0213'):
+                own[name] = r['x0213']
+            mj.append([int(name[2:]), ucs[2:] if ucs else '',
+                       ivs_selector(r.get('ivs'), ucs, name)])
 
     with open(shrink_path, encoding='utf-8') as f:
         shrink = json.load(f)
 
-    cand = []
+    # 面区点 -> UCS の表。候補は面区点の添字で指すのでここが辞書がわりになる
+    jis_ucs = {}
     for item in shrink['content']:
-        name = item['MJ文字図形名']
-        i = index_of.get(name)
+        for key in SRC_KEYS:
+            for c in item.get(key, []):
+                jis_ucs.setdefault(c['JIS X 0213'], c['UCS'][2:])
+    jis = sorted(jis_ucs)
+    jis_idx = {code: i for i, code in enumerate(jis)}
+
+    # (MJ, 縮退先) の重複を潰し、根拠はビットにまとめる
+    pairs = {}
+    for item in shrink['content']:
+        i = index_of.get(item['MJ文字図形名'])
         if i is None:
-            print(f'warn: {name} は xlsx に無い', file=sys.stderr)
+            print(f"warn: {item['MJ文字図形名']} は xlsx に無い", file=sys.stderr)
             continue
         for si, key in enumerate(SRC_KEYS):
             for c in item.get(key, []):
-                # 種別(戸籍法) / 表+順位(告示582号) を付記として残す
-                note = c.get('種別') or (c.get('表', '') + c.get('順位', '')) or ''
-                if c.get('付記'):
-                    note = f"{note}({c['付記']})" if note else c['付記']
-                cand.append([i, c['UCS'][2:], c['JIS X 0213'], si, c.get('ホップ数') or 0, note])
+                k = (i, jis_idx[c['JIS X 0213']])
+                pairs[k] = pairs.get(k, 0) | (1 << si)
+
+    # MJ自身の面区点が候補に無いものが居ないか確かめる（居なければ別枠で持たなくてよい）
+    missing = [n for n, code in own.items()
+               if (index_of[n], jis_idx.get(code, -1)) not in pairs]
+    if missing:
+        print(f'warn: 自身の面区点が候補に無いMJが {len(missing)}件: {missing[:5]}', file=sys.stderr)
 
     return {
         'meta': {
@@ -112,9 +129,9 @@ def build(xlsx_path, shrink_path):
             'shrink': shrink['meta'].get('owl:versionInfo', ''),
             'built': date.today().isoformat(),
         },
-        'src': SRC_KEYS,
+        'jis': [[code, jis_ucs[code]] for code in jis],
         'mj': mj,
-        'cand': cand,
+        'cand': [[i, j, b] for (i, j), b in sorted(pairs.items())],
     }
 
 
@@ -130,12 +147,12 @@ def main():
     with open(a.out, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
 
-    targets = {c[2] for c in data['cand']}
     with_cand = len({c[0] for c in data['cand']})
-    print(f"{a.out}: MJ {len(data['mj']):,} / 候補 {len(data['cand']):,} / "
-          f"縮退先の面区点 {len(targets):,} / 候補ありMJ {with_cand:,} / "
-          f"縮退先なしMJ {len(data['mj']) - with_cand:,} / "
-          f"IVSあり {sum(1 for m in data['mj'] if m[2]):,}")
+    t = Counter(0 if c[2] & 1 else (1 if c[2] & 6 else 2) for c in data['cand'])
+    print(f"{a.out}: MJ {len(data['mj']):,} / 縮退エッジ {len(data['cand']):,} / "
+          f"面区点 {len(data['jis']):,} / 縮退先なしMJ {len(data['mj']) - with_cand:,} / "
+          f"IVSあり {sum(1 for m in data['mj'] if m[2]):,}\n"
+          f"  根拠: 規格(包摂・統合) {t[0]:,} / 法令・告示 {t[1]:,} / 辞書・類推のみ {t[2]:,}")
 
 
 if __name__ == '__main__':

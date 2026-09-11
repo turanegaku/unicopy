@@ -44,6 +44,9 @@
     .level-separator.lvl2 span::before, .level-separator.lvl2 span::after { background-color: #9b59b6; }
     .level-separator.lvl3 span::before, .level-separator.lvl3 span::after { background-color: #e67e22; }
     .level-separator.lvl4 span::before, .level-separator.lvl4 span::after { background-color: #e74c3c; }
+    .level-separator.lvl5 span::before, .level-separator.lvl5 span::after { background-color: #7f8c8d; }
+    /* JIS水準の並びとは別物なので、見出しを一段強く離す */
+    .level-separator.lvl5 { margin-top: 60px; border-top: 3px double #bdc3c7; padding-top: 22px; }
 
     /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
        カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
@@ -56,6 +59,9 @@
     /* 漢字カードは水準ごとに上端4pxだけ色を付ける(点数バッジの代わり) */
     .card.lvl1 { border-top: 4px solid #3498db; } .card.lvl2 { border-top: 4px solid #9b59b6; }
     .card.lvl3 { border-top: 4px solid #e67e22; } .card.lvl4 { border-top: 4px solid #e74c3c; }
+    /* 外字（縮退先が定義されていないMJ字形）。IVSを効かせたいのでIPAmj明朝で描く */
+    .card.lvl5 { border-top: 4px solid #7f8c8d; }
+    .card.lvl5 .char-main { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; }
 
     .char-main { font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 2rem; font-weight: 500; display: block; margin-bottom: 5px; line-height: 1.2; }
     
@@ -75,9 +81,12 @@
        ONのときだけ一覧を独立したスクロールコンテナにしてツリーと縦位置を同期させる。 */
     .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
     .tree-bar input[type="text"] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; min-width: 210px; }
-    .tree-bar button { padding: 6px 14px; background: #3498db; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-family: inherit; }
-    .tree-bar button:hover:not(:disabled) { background: #2980b9; }
-    .tree-bar button:disabled { background: #bdc3c7; cursor: default; }
+    /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
+    .switch { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 9px; border: 1px solid #ccc; border-radius: 5px; cursor: pointer; user-select: none; }
+    .switch input { width: 15px; height: 15px; accent-color: #3498db; cursor: pointer; margin: 0; }
+    .switch:hover { background: #ebf5fb; }
+    .switch:has(input:checked) { background: #ebf5fb; border-color: #3498db; color: #2980b9; font-weight: bold; }
+    .switch:has(input:disabled) { color: #bdc3c7; border-color: #e4e4e4; cursor: default; background: none; }
     .tree-bar .status { color: #7f8c8d; margin-left: auto; }
     .tree-bar .credit { flex-basis: 100%; font-size: 0.7rem; color: #aaa; }
     .tree-bar .credit a { color: #aaa; }
@@ -87,7 +96,8 @@
 
     #kanjiPanes { display: flex; gap: 12px; align-items: flex-start; }
     #kanjiContainer { flex: 1; min-width: 0; }
-    body.tree-on #kanjiContainer { height: calc(100vh - 210px); overflow-y: auto; overflow-x: hidden; }
+    /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
+    body.tree-on #kanjiContainer { height: calc(100vh - 210px); overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     #treePane { display: none; flex: 0 0 470px; height: calc(100vh - 210px); overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; }
     body.tree-on #treePane { display: block; }
 
@@ -97,13 +107,24 @@
     #treeBody { position: relative; }
     .tree-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid #f4f4f4; }
     .tree-row.on { background: #ebf5fb; }
-    .tree-sec { position: absolute; left: 0; right: 0; font-size: 0.75rem; font-weight: bold; color: #7f8c8d; background: #f4f4f4; padding-top: 8px; }
-    .tree-line { position: absolute; top: 18px; height: 1px; background: #cfd8dc; }
+    .tree-line { position: absolute; height: 1px; background: #cfd8dc; }
+    /* 縮退先ごとの縦バス。交点の点が打たれた行だけがその字に繋がっている */
+    .tree-bus { position: absolute; width: 1px; margin-left: -1px; background: #dfe6e9; }
+    /* 根拠の段を線種で示す。実線=規格の包摂・統合、破線=法令の読み替え、点線=辞書・類推 */
+    .tree-line.t1 { height: 0; background: none; border-top: 1px dashed #b0bec5; }
+    .tree-line.t2 { height: 0; background: none; border-top: 1px dotted #90a4ae; }
+    .tree-bus.t1 { width: 0; background: none; border-left: 1px dashed #cfd8dc; }
+    .tree-bus.t2 { width: 0; background: none; border-left: 1px dotted #b0bec5; }
+    .tree-box { position: absolute; border: 1px solid #cfd8dc; border-radius: 5px; background: rgba(255,255,255,.5); }
+    .tree-row.grp { border-top: 2px solid #e6ecf0; }
+    .tree-node .m[data-copy] { cursor: pointer; }
+    .tree-node .m[data-copy]:hover { color: #3498db; text-decoration: underline; }
     .tree-node { position: absolute; width: 90px; margin-left: -45px; text-align: center; }
     .tree-node .g { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; font-size: 1.3rem; line-height: 1.15; display: block; cursor: pointer; }
     .tree-node .m { font-size: 0.55rem; color: #aaa; display: block; line-height: 1.1; white-space: nowrap; }
     .tree-node.hit .g { border-radius: 3px; }
-    .tree-node .src { font-size: 0.55rem; color: #7f8c8d; letter-spacing: 1px; }
+    /* 右クリックで飛んだ先を1秒だけ水準色のリングで示す */
+    .card.flash { box-shadow: 0 0 0 3px var(--flash); background: #fffdf0; }
     .tree-empty { padding: 20px; color: #999; font-size: 0.85rem; text-align: center; }
   </style>
 </head>
@@ -120,7 +141,12 @@
   <div id="kanji" class="tab-content active">
     <div class="tree-bar">
       <label>縮退データ: <input type="file" id="mjmapInput" accept=".json"></label>
-      <button id="treeToggle" disabled>ツリー OFF</button>
+      <label class="switch"><input type="checkbox" id="treeToggle" disabled> 縮退ツリーを表示</label>
+      <span class="tiers">根拠:
+        <label class="switch mini" title="JIS包摂規準・UCS統合規則。規格が同じ文字と定めたもの（実線）"><input type="checkbox" class="tier" data-t="0" checked> 規格</label>
+        <label class="switch mini" title="法務省戸籍法関連通達・告示582号別表第四。別の文字への行政上の読み替え（破線）"><input type="checkbox" class="tier" data-t="1" checked> 法令・告示</label>
+        <label class="switch mini" title="辞書類等による関連字・読み字形による類推。IPAの一意変換表でも採用されていない参考情報（点線）"><input type="checkbox" class="tier" data-t="2"> 辞書・類推</label>
+      </span>
       <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81" disabled>
       <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
       <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
@@ -656,6 +682,8 @@
         container.appendChild(grid);
       });
 
+      total += renderGaiji(container, targetChars);
+
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
       rebuildTree();
     }
@@ -664,7 +692,7 @@
       const card = document.createElement('div');
       card.className = `card lvl${level}`;
       card.innerHTML = `${kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : ''}<span class="char-main">${char}</span>`;
-      card.title = `漢字「${char}」 第${level}水準 区${ku}`;
+      card.title = `「${char}」 ${charJis.get(char) || `第${level}水準 区${ku}`}`;
       card.dataset.char = char;
       card.dataset.i = listOrder.length;
       card.onclick = () => copyText(char, `漢字「${char}」`);
@@ -734,25 +762,30 @@
        左ほど縮退の終着点(第1水準)、右ほど源流(MJ)になる。
        ===================================================================== */
     const LEVEL_COLOR = { 1: "#3498db", 2: "#9b59b6", 3: "#e67e22", 4: "#e74c3c", 5: "#7f8c8d" };
-    const SRC_MARK = ["包", "告", "戸", "辞", "読"]; // mjmap.json の src と同じ並び
-    const COL_W = 92, ROW_H = 38, SUB_H = 26, SEC_H = 30;
-    const COL_LABEL = ["第1水準", "第2水準", "第3水準", "第4水準", "MJ(JIS外)"];
+    const COL_W = 90, ROW_H = 34, SUB_H = 34;
+    const COL_LABEL = ["第1水準", "第2水準", "第3水準", "第4水準", "MJ"];
 
     let mjmap = null;
     let hasIPAmjFont = false;
     const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
     const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
-    const candByMj = new Map();   // MJ index -> [候補]
+    const candByMj = new Map();   // MJ index -> [面区点の添字]
     const mjIndex = new Map();    // "MJ000089" -> index
     const jisChar = new Map();    // "1-18-81" -> "会"
+    const charJis = new Map();    // "会" -> "1-18-81"
+    let jisCh = [];               // 面区点の添字 -> 文字
 
     // 一覧の描画順。ツリーの行順と縦スクロール同期の基準になる
     let listOrder = [], cardEls = [];
-    let treeRows = [], firstRowOf = [];
+    let treeRows = [], treeGroups = [], firstRowOf = [];
 
     const el = id => document.getElementById(id);
     const cp = hex => hex ? String.fromCodePoint(parseInt(hex, 16)) : "";
     const push = (map, k, v) => { const a = map.get(k); a ? a.push(v) : map.set(k, [v]); };
+    const mjName = num => "MJ" + String(num).padStart(6, "0");
+    // 0=規格(JIS包摂規準・UCS統合規則) 1=法令・告示(戸籍法通達/582号) 2=辞書・類推のみ
+    const tierOf = bits => bits & 1 ? 0 : (bits & 6 ? 1 : 2);
+    const tierOn = [true, true, false]; // 辞書・類推はデータには持つが既定では描かない
 
     // ---- IndexedDB（mjmap.json は 4〜5MB あり localStorage には入らない） ----
     function idb(mode, fn) {
@@ -802,27 +835,36 @@
       mjmap = JSON.parse(text);
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
-      mjmap.mj.forEach((m, i) => {
-        mjIndex.set(m[0], i);
-        if (m[3]) { jisChar.set(m[3], cp(m[1])); push(mjByChar, cp(m[1]), i); }
+      mjmap.mj.forEach((m, i) => mjIndex.set(mjName(m[0]), i));
+      jisCh = mjmap.jis.map(j => cp(j[1]));
+      mjmap.jis.forEach((j, k) => {
+        jisChar.set(j[0], jisCh[k]);
+        if (!charJis.has(jisCh[k])) charJis.set(jisCh[k], j[0]);
       });
-      mjmap.cand.forEach(c => {
-        const ch = cp(c[1]);
-        jisChar.set(c[2], ch);
-        push(candByMj, c[0], c);
-        push(mjByChar, ch, c[0]);
-      });
-      mjByChar.forEach((a, k) => {
-        a.sort((x, y) => x - y);
-        mjByChar.set(k, a.filter((v, i) => i === 0 || v !== a[i - 1]));
-      });
+      buildEdges();
 
       el("mjmapStatus").textContent =
-        `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退候補 ${mjmap.cand.length.toLocaleString()}件`;
+        `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
       el("treeToggle").disabled = false;
       el("mjSearch").disabled = false;
-      rebuildTree();
+      renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
     }
+
+    // 表示する根拠の段だけでエッジを張り直す。段を切ると縮退先が無くなるMJは外字へ回る
+    function buildEdges() {
+      candByMj.clear(); mjByChar.clear();
+      mjmap.cand.forEach(([mi, ji, bits]) => {
+        const t = tierOf(bits);
+        if (!tierOn[t]) return;
+        push(candByMj, mi, [ji, t]);
+        push(mjByChar, jisCh[ji], mi);
+      });
+    }
+
+    document.querySelectorAll(".tier").forEach(box => box.addEventListener("change", e => {
+      tierOn[+e.target.dataset.t] = e.target.checked;
+      if (mjmap) { buildEdges(); renderKanji(); }
+    }));
 
     el("mjmapInput").addEventListener("change", e => {
       const f = e.target.files[0];
@@ -840,37 +882,153 @@
       r.readAsText(f);
     });
 
+    // 外字の区分けに使う Unicode ブロック（MJ文字集合に実際に現れるものだけ）
+    const CJK_BLOCKS = [
+      [0x2E80, 0x2FDF, "CJK部首"], [0x3400, 0x4DBF, "CJK拡張A"], [0x4E00, 0x9FFF, "CJK統合漢字"],
+      [0xF900, 0xFAFF, "CJK互換漢字"], [0x20000, 0x2A6DF, "CJK拡張B"], [0x2A700, 0x2B73F, "CJK拡張C"],
+      [0x2B740, 0x2B81F, "CJK拡張D"], [0x2B820, 0x2CEAF, "CJK拡張E"], [0x2CEB0, 0x2EBEF, "CJK拡張F"],
+      [0x2EBF0, 0x2EE5D, "CJK拡張I"], [0x2F800, 0x2FA1F, "CJK互換漢字補助"],
+      [0x30000, 0x3134F, "CJK拡張G"], [0x31350, 0x323AF, "CJK拡張H"],
+    ];
+    function cjkBlock(code) {
+      const b = CJK_BLOCKS.find(([a, z]) => code >= a && code <= z);
+      return b ? b[2] : "その他";
+    }
+
+    /* ---- 一覧の末尾に付ける外字セクション ----
+       縮退先が1つも定義されていないMJ字形。ツリーに出すと2万3千行かさばるだけなので、
+       一覧側で灰色の1セクションとして眺められるようにする。
+       （縮退先を持つJIS外のMJ字形はツリーのMJ列に出るので、ここには入らない） */
+    function renderGaiji(container, targetChars) {
+      if (!mjmap) return 0;
+      const items = [];
+      mjmap.mj.forEach((m, i) => {
+        if (candByMj.has(i) || !m[1]) return;
+        const ch = cp(m[1]) + (m[2] ? cp(m[2]) : "");
+        if (targetChars !== null && !targetChars.has(ch)) return;
+        items.push({ char: ch, mj: mjName(m[0]), code: parseInt(m[1], 16) });
+      });
+      if (!items.length) return 0;
+      items.sort((a, b) => a.code - b.code || a.mj.localeCompare(b.mj));
+
+      // ブロックは 拡張A/統合/互換/拡張B〜F にまたがるが、見出しを分けるとかさばるので
+      // 1項目にまとめ、どのブロックの字かは各カードの tooltip に出す
+      const sep = document.createElement("div");
+      sep.className = "level-separator lvl5";
+      sep.innerHTML = "<span>MJ外字</span>";
+      container.appendChild(sep);
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      container.appendChild(grid);
+
+      items.forEach(it => {
+        const card = document.createElement("div");
+        card.className = "card lvl5";
+        card.innerHTML = `<span class="char-main">${it.char}</span>`;
+        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${cjkBlock(it.code)}`;
+        card.dataset.char = it.char;
+        card.dataset.i = listOrder.length;
+        card.onclick = () => copyText(it.char, `「${it.char}」`);
+        grid.appendChild(card);
+        if (!charLevel.has(it.char)) charLevel.set(it.char, 5);
+        listOrder.push({ char: it.char, level: 5, mj: it.mj });
+        cardEls.push(card);
+      });
+      return items.length;
+    }
+
     /* ---- ツリーの行を組む ----
        行の並びは一覧のカード順。各カードの文字に関わる MJ をその下にぶら下げる。
-       複数のJIS字に縮退するMJは、それぞれのカードの下に重複して現れる（逆引きとして正しい）。 */
+       複数のJIS字に縮退するMJは、それぞれのカードの下に重複して現れる（逆引きとして正しい）。
+
+       同じカードの下は「縮退先の組み合わせ」＝枝でまとめ、組み合わせが小さい順に並べる。
+       枝は自分を含む直近の枝を親にして、親から増えたぶんの字だけを描く。
+       2字以上増える枝は枠で囲み、その中心から左へ出して └ で親に繋ぐ。
+       横線はその枝の幹から右にしか伸びないので、交点に点を打たなくても読める。 */
     function rebuildTree() {
       const pane = el("treePane");
       if (!mjmap) { pane.innerHTML = '<div class="tree-empty">縮退データ未読込</div>'; return; }
 
-      treeRows = []; firstRowOf = [];
-      const seen = new Set();
+      treeRows = []; treeGroups = []; firstRowOf = [];
+      let y = 0;
       listOrder.forEach((it, i) => {
         firstRowOf[i] = treeRows.length;
-        (mjByChar.get(it.char) || []).forEach(m => { seen.add(m); treeRows.push({ mj: m, anchor: i }); });
-      });
+        const mjs = (mjByChar.get(it.char) || []).slice();
+        if (!mjs.length) return;
 
-      // 縮退先を1つも持たないMJ（23,011字）。捨てずに末尾のセクションに出す
-      const orphans = [];
-      if (!document.querySelector('input[name="radical"]:checked')) {
-        mjmap.mj.forEach((m, i) => { if (!candByMj.has(i) && !seen.has(i)) orphans.push(i); });
-      }
-      if (orphans.length) {
-        treeRows.push({ sec: `縮退先なし ${orphans.length.toLocaleString()}字`, anchor: listOrder.length - 1 });
-        orphans.forEach(m => treeRows.push({ mj: m, anchor: listOrder.length - 1 }));
-      }
+        // 字形が一致するMJ（自身の面区点がこの字）を先に見て、その字に0番を振る
+        const isOwn = m => cp(mjmap.mj[m][1]) === it.char;
+        mjs.sort((a, b) => (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
-      // 行の縦位置。同一列に複数ノードが来る行は縦に積むので高さが変わる。
-      // 累積和で持っておけば描画時は二分探索で先頭行を引けるだけで済む（DPは要らない）。
-      let y = 0;
-      treeRows.forEach(r => {
-        r.y = y;
-        r.h = r.sec ? SEC_H : ROW_H + (rowLines(r.mj) - 1) * SUB_H;
-        y += r.h;
+        const byCh = new Map(), setOf = new Map(), tierOfRow = new Map(), tierOfEdge = new Map();
+        mjs.forEach(m => {
+          let b = 0, worst = 0;
+          (candByMj.get(m) || []).forEach(([ji, ti]) => {
+            const ch = jisCh[ji];
+            let t = byCh.get(ch);
+            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], col: (charLevel.get(ch) || 5) - 1, idx: byCh.size });
+            b |= 1 << t.idx;
+            if (ti > worst) worst = ti;          // 行の線はその行がぶら下がる一番弱い根拠に合わせる
+            tierOfEdge.set(m + ":" + t.idx, ti);
+          });
+          setOf.set(m, b);
+          tierOfRow.set(m, worst);
+        });
+        const targets = [...byCh.values()];
+
+        // 縮退先が少ない順。同数なら組み合わせ順 → 字形一致 → MJ番号。
+        // 虼 のように「蝱 を経ずに直接 虻 へ行く」MJが上にまとまる。
+        const pop = b => (b >>> 0).toString(2).replace(/0/g, "").length;
+        mjs.sort((a, b) => pop(setOf.get(a)) - pop(setOf.get(b)) || setOf.get(a) - setOf.get(b)
+          || (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
+
+        // 同じ組み合わせの連なりを1つの枝にする
+        const branches = [];
+        mjs.forEach((m, k) => {
+          const last = branches[branches.length - 1];
+          if (last && last.bits === setOf.get(m)) { last.last = k; return; }
+          branches.push({ bits: setOf.get(m), first: k, last: k });
+        });
+
+        branches.forEach((br, bi) => {
+          br.parent = -1;
+          for (let j = bi - 1; j >= 0; j--) {
+            if ((branches[j].bits & br.bits) === branches[j].bits) { br.parent = j; break; }
+          }
+          // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる
+          if (br.parent < 0 && bi > 0) br.parent = 0;
+          const base = bi === 0 ? 0 : branches[br.parent].bits;
+          br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)));
+          // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
+          br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
+
+          // 増えたぶんの字を列ごとに縦へ積み、枠の中心を幹の位置にする
+          const slot = {};
+          br.delta.forEach(t => { t.slot = slot[t.col] || 0; slot[t.col] = t.slot + 1; });
+          br.lines = Math.max(1, ...br.delta.map(t => slot[t.col]));
+          const xs = br.delta.map(t => t.col * COL_W + COL_W / 2);
+          br.delta.forEach((t, k) => { t.x = xs[k]; });
+          br.loX = Math.min(...xs);
+          br.spineX = (br.loX + Math.max(...xs)) / 2;
+        });
+        branches.forEach(br => {
+          // 幹は自分の行と、自分にぶら下がる枝の先頭行まで通す
+          br.to = br.last;
+          branches.forEach(c => { if (c.parent === branches.indexOf(br) && c.first > br.to) br.to = c.first; });
+        });
+
+        branches.forEach((br, bi) => br.delta.forEach(t => { t.branch = bi; }));
+        const gi = treeGroups.length;
+        treeGroups.push({ branches });
+        const brOf = [];
+        branches.forEach((br, bi) => { for (let k = br.first; k <= br.last; k++) brOf[k] = bi; });
+        mjs.forEach((m, k) => {
+          const bi = brOf[k], br = branches[bi];
+          const ex = (k === br.first ? br.lines : 1) - 1;
+          treeRows.push({ g: gi, mj: m, k, b: bi, anchor: i, y, h: ROW_H + ex * SUB_H, ex, top: k === 0,
+                          tier: tierOfRow.get(m) || 0 });
+          y += ROW_H + ex * SUB_H;
+        });
       });
 
       let head = '<div class="tree-head" style="width:' + COL_W * 5 + 'px">';
@@ -881,68 +1039,66 @@
       syncTree();
     }
 
-    // その行が何段必要か（同一列に重なるノードの最大数、3段まで）
-    function rowLines(mi) {
-      const m = mjmap.mj[mi];
-      const n = { 5: 1 }; // MJ列には必ず自分自身が入る
-      const bump = ch => { const c = (charLevel.get(ch) || 5); n[c] = (n[c] || 0) + 1; };
-      const seen = new Set();
-      (candByMj.get(mi) || []).forEach(c => {
-        if (c[2] === m[3] || seen.has(c[2])) return;
-        seen.add(c[2]); bump(cp(c[1]));
-      });
-      return Math.min(3, Math.max(...Object.values(n)));
+    function nodeHtml(x, top, color, ch, meta, on, tint, copy) {
+      return `<div class="tree-node${on ? " hit" : ""}" style="left:${x}px;top:${top}px">`
+        + `<span class="g" style="color:${color}${on ? ";background:" + tint + "40" : ""}" data-c="${ch}" data-k="${ch}">${ch}</span>`
+        + `<span class="m"${copy ? ` data-copy="${copy}" title="クリックでコピー"` : ""}>${meta}</span></div>`;
     }
 
-    // 行のノードを組み立てる。自分自身＋縮退先を、それぞれの水準の列に置く
-    function rowNodes(mi) {
-      const m = mjmap.mj[mi];
+    function rowHtml(r, hit, tint) {
+      const g = treeGroups[r.g];
+      const br = g.branches[r.b];
+      const parent = br.parent >= 0 ? g.branches[br.parent] : null;
+      const m = mjmap.mj[r.mj];
       const base = cp(m[1]);
       const glyph = m[2] ? base + cp(m[2]) : base; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
-      // MJ字形は自分が第1水準の字と1:1対応でも常に右端のMJ列に置く。
-      // 水準列に並ぶのは縮退先だけ、と決めておかないと同じ字が2度出て読めなくなる。
-      const nodes = [{ ch: glyph, lv: 5, sub: m[0] + (m[3] ? " " + m[3] : ""), self: true, key: base }];
+      const mjX = 4 * COL_W + COL_W / 2;
+      // 枠を作る枝の先頭行だけは、横線を枠の中心に通して「枠の中心から左へ出す」形にする
+      const boxed = r.k === br.first && br.delta.length > 1;
+      const lineY = boxed ? br.lines * SUB_H / 2 - 3 : r.ex * SUB_H + 16;
+      const mjTop = lineY - 17;
 
-      const byJis = new Map();
-      (candByMj.get(mi) || []).forEach(c => {
-        if (c[2] === m[3]) return; // 自分自身への包摂は自明なので描かない
-        let t = byJis.get(c[2]);
-        if (!t) byJis.set(c[2], t = { ch: cp(c[1]), jis: c[2], src: new Set(), hop: 0, notes: [] });
-        t.src.add(c[3]);
-        if (c[4] > t.hop) t.hop = c[4];
-        if (c[5]) t.notes.push(SRC_MARK[c[3]] + ":" + c[5] + (c[4] ? ` ホップ${c[4]}` : ""));
-      });
-      byJis.forEach(t => nodes.push({
-        ch: t.ch, lv: charLevel.get(t.ch) || 5, key: t.ch, jis: t.jis,
-        sub: [...t.src].sort().map(s => SRC_MARK[s]).join("") + (t.hop > 1 ? t.hop : ""),
-        title: t.notes.join(" / ")
-      }));
-      return nodes;
-    }
+      const on = base === hit || (r.k === br.first && br.delta.some(t => t.ch === hit));
 
-    function rowHtml(r, hitChar, hitTint) {
-      if (r.sec) return `<div class="tree-sec" style="top:${r.y}px;height:${SEC_H}px">　${r.sec}</div>`;
-      const nodes = rowNodes(r.mj);
-      const cols = nodes.map(n => (n.lv === 5 ? 4 : n.lv - 1));
-      const lo = Math.min(...cols), hi = Math.max(...cols);
-      const rowHit = hitChar && nodes.some(n => n.key === hitChar);
-      let h = `<div class="tree-row" style="top:${r.y}px;height:${r.h}px`
-        + (rowHit ? `;background:${hitTint}1a` : "") + '">';
-      if (lo !== hi) h += `<div class="tree-line" style="left:${lo * COL_W + COL_W / 2}px;width:${(hi - lo) * COL_W}px"></div>`;
-      const used = {};
-      nodes.forEach((n, k) => {
-        const c = cols[k];
-        used[c] = (used[c] || 0) + 1;
-        if (used[c] > 3) return; // 同一列に4つ以上来ることはほぼ無い。溢れたら落とす
-        const color = LEVEL_COLOR[n.lv] || LEVEL_COLOR[5];
-        const on = n.key === hitChar;
-        h += `<div class="tree-node${on ? " hit" : ""}"`
-          + ` style="left:${c * COL_W + COL_W / 2}px;top:${1 + (used[c] - 1) * SUB_H}px"`
-          + (n.title ? ` title="${n.title.replace(/"/g, "&quot;")}"` : "") + ">"
-          + `<span class="g" style="color:${color}${on ? ";background:" + hitTint + "40" : ""}" data-c="${n.ch}" data-k="${n.key}">${n.ch}</span>`
-          + `<span class="m">${n.self ? n.sub : '<span class="src">' + n.sub + "</span> " + n.jis}</span></div>`;
+      let h = `<div class="tree-row${r.top ? " grp" : ""}" style="top:${r.y}px;height:${r.h}px`
+        + (on ? `;background:${tint}1a` : "") + '">';
+
+      // 横線は繋がる縮退先ごとに区切り、その区間を通って届く縮退先の根拠の線種で描く。
+      // 秌(MJ019007) なら MJ〜秌 は包摂なので実線、秌〜秋 は戸籍法通達なので破線になる。
+      const pts = [];
+      (candByMj.get(r.mj) || []).forEach(([ji, ti]) => {
+        const t = g.byCh.get(jisCh[ji]);
+        if (!t) return;
+        const x = g.branches[t.branch].spineX;
+        const e = pts.find(q => q.x === x);
+        if (e) { if (ti > e.tier) e.tier = ti; } else pts.push({ x, tier: ti });
       });
-      return h + "</div>";
+      pts.sort((a, b) => a.x - b.x);
+      if (parent && r.k === br.first && (!pts.length || parent.spineX < pts[0].x)) pts.unshift({ x: parent.spineX, tier: br.tier });
+      pts.forEach((q, k) => {
+        const to = k + 1 < pts.length ? pts[k + 1].x : mjX;
+        if (to > q.x) h += `<div class="tree-line t${q.tier}" style="left:${q.x}px;top:${lineY}px;width:${to - q.x}px"></div>`;
+      });
+
+      // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
+      g.branches.forEach(b2 => {
+        if (r.k < b2.first || r.k > b2.to) return;
+        const from = r.k === b2.first ? r.ex * SUB_H + 28 : 0;
+        const to = r.k === b2.to ? lineY : r.h;
+        if (to > from) h += `<div class="tree-bus t${b2.tier}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
+      });
+
+      if (r.k === br.first) {
+        // 2字以上まとめて増える枝は枠で囲み、この枠がひとかたまりであることを示す
+        if (br.delta.length > 1) {
+          const l = Math.min(...br.delta.map(t => t.x)) - 30, w = Math.max(...br.delta.map(t => t.x)) + 30 - l;
+          h += `<div class="tree-box" style="left:${l}px;top:-1px;width:${w}px;height:${br.lines * SUB_H + 2}px"></div>`;
+        }
+        br.delta.forEach(t => {
+          h += nodeHtml(t.x, (r.ex - t.slot) * SUB_H - 1, LEVEL_COLOR[t.col + 1], t.ch, t.jis, t.ch === hit, tint);
+        });
+      }
+      return h + nodeHtml(mjX, mjTop, LEVEL_COLOR[5], glyph, mjName(m[0]), base === hit, tint, mjName(m[0])) + "</div>";
     }
 
     // 見えている行だけDOMにする（全行は10万近くになるので実体化しない）
@@ -1040,23 +1196,18 @@
       }, { passive: true });
     }
 
-    // 一覧は1行に十数字並ぶので、カーソルを合わせた字のツリー行は素のままだと画面外に居る。
-    // 一覧側のホバーではツリーをその行まで送る（ツリー側のホバーでは送らない。跳ねるので）
-    function setHover(ch, cardIdx) {
-      if (ch !== hoverChar) hoverChar = ch;
-      if (!mjmap || !document.body.classList.contains("tree-on")) return;
-      if (cardIdx != null) {
-        setAnchor(cardIdx);
-        const tp = el("treePane"), want = treeRows[firstRowOf[cardIdx]];
-        if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
-      }
-      renderTreeWindow();
+    // ホバーは強調するだけ。マウスを乗せただけで表示が動くと落ち着いて読めないので、
+    // 実際にスクロールさせるのは右クリック（jumpToChar）に限る。
+    function setHover(ch) {
+      if (ch === hoverChar) return;
+      hoverChar = ch;
+      if (mjmap && document.body.classList.contains("tree-on")) renderTreeWindow();
     }
     // 字の上に来た時だけ更新する。隙間を通っただけで消えると、
     // 再描画でカーソル下の要素が入れ替わるたびにハイライトが点滅してしまう。
     el("kanjiContainer").addEventListener("mouseover", e => {
       const c = e.target.closest(".card");
-      if (c) setHover(c.dataset.char, +c.dataset.i);
+      if (c) setHover(c.dataset.char);
     });
     el("kanjiContainer").addEventListener("mouseleave", () => setHover(null));
     el("treePane").addEventListener("mouseover", e => {
@@ -1065,9 +1216,24 @@
     });
     el("treePane").addEventListener("mouseleave", () => setHover(null));
 
-    el("treeToggle").addEventListener("click", () => {
-      const on = document.body.classList.toggle("tree-on");
-      el("treeToggle").textContent = on ? "ツリー ON" : "ツリー OFF";
+    // 右クリックで一覧のその字へ移動する（両ペインとも）
+    function onContext(e, ch) {
+      if (!ch) return;
+      e.preventDefault();
+      if (!jumpToChar(ch)) el("mjmapStatus").textContent = `「${ch}」は一覧にありません`;
+    }
+    el("kanjiContainer").addEventListener("contextmenu", e => {
+      const c = e.target.closest(".card");
+      onContext(e, c && c.dataset.char);
+    });
+    el("treePane").addEventListener("contextmenu", e => {
+      const g = e.target.closest(".g");
+      onContext(e, g && g.dataset.k);
+    });
+
+    el("treeToggle").addEventListener("change", e => {
+      const on = e.target.checked;
+      document.body.classList.toggle("tree-on", on);
       if (on) { curAnchor = -1; lastListTop = lastTreeTop = -1; syncTree(); }
     });
 
@@ -1076,23 +1242,43 @@
       updateFontBadge();
     });
 
-    // ツリーの字をクリックしたら一覧のその字へ飛ぶ
+    // ツリーの左クリックはコピー（字はその字、MJ番号はMJ番号）、右クリックで移動
     el("treePane").addEventListener("click", e => {
+      const m = e.target.closest("[data-copy]");
+      if (m) { copyText(m.dataset.copy, m.dataset.copy); return; }
       const g = e.target.closest(".g");
-      if (g) jumpToChar(g.dataset.k);
+      if (g) copyText(g.dataset.c, `「${g.dataset.c}」`);
     });
 
-    // 一覧の該当カードへスクロールし、ツリーもその行に合わせる。見つかれば true
+    // 一覧の該当カードへスクロールし、ツリーもその行に合わせて1秒光らせる。見つかれば true
+    let flashed = null, flashTimer = 0;
     function jumpToChar(ch) {
       const i = listOrder.findIndex(it => it.char === ch);
       if (i < 0) return false;
       if (!document.body.classList.contains("tree-on")) el("treeToggle").click();
       driver = "list";
-      const pane = el("kanjiContainer");
-      pane.scrollTop = paneTop(cardEls[i], pane) - 8;
-      lastListTop = pane.scrollTop;
+      const pane = el("kanjiContainer"), card = cardEls[i];
+      const top = paneTop(card, pane);
+      // 上端ぴったりだと sticky の水準見出しに潜るので、窓の1/4ほど下に置く
+      const margin = Math.min(pane.clientHeight / 4, 140);
+      // 既に見えているカードをわざわざ動かすと目で追えなくなるので、外に居る時だけ動かす
+      if (top < pane.scrollTop + 40 || top > pane.scrollTop + pane.clientHeight - 60) {
+        pane.scrollTop = top - margin;
+        lastListTop = pane.scrollTop;
+      }
+      hoverChar = ch;
       curAnchor = -1;
-      setHover(ch, i); // 一覧は横に十数字並ぶのでアンカーは自動判定に任せず対象に固定する
+      setAnchor(i); // 一覧は横に十数字並ぶのでアンカーは自動判定に任せず対象に固定する
+      const tp = el("treePane"), want = treeRows[firstRowOf[i]];
+      if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
+      renderTreeWindow();
+
+      if (flashed) flashed.classList.remove("flash");
+      clearTimeout(flashTimer);
+      card.style.setProperty("--flash", LEVEL_COLOR[listOrder[i].level] || LEVEL_COLOR[5]);
+      card.classList.add("flash");
+      flashed = card;
+      flashTimer = setTimeout(() => card.classList.remove("flash"), 1000);
       return true;
     }
 
@@ -1115,9 +1301,9 @@
       const st = el("mjmapStatus");
       if (!ch) { st.textContent = "見つかりませんでした"; return; }
       const mjs = mjByChar.get(ch) || [];
-      const into = mjs.filter(i => (candByMj.get(i) || []).some(c => cp(c[1]) === ch)).length;
+      const into = mjs.length;
       const outOf = new Set();
-      mjs.forEach(i => (candByMj.get(i) || []).forEach(c => { if (cp(c[1]) !== ch) outOf.add(c[2]); }));
+      mjs.forEach(i => (candByMj.get(i) || []).forEach(([ji]) => { if (jisCh[ji] !== ch) outOf.add(mjmap.jis[ji][0]); }));
       st.textContent = `「${ch}」 縮退元 ${into}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
 
       if (!jumpToChar(ch)) st.textContent += " ※一覧に無い字";
