@@ -171,7 +171,7 @@
     <div class="search-container" id="radicalListboxes">
       <div class="find-row">
         <span class="bar-label">検索</span>
-        <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81" disabled>
+        <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81 / 1-18" disabled>
         <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
       </div>
     </div>
@@ -670,6 +670,15 @@
         targetChars = new Set(KANJI_RADICALS[part][rad]);
       }
 
+      // 検索欄も絞り込みとして効かせる。面区点の前方一致は面・区で、それ以外は1字に解決して絞る
+      const q = document.getElementById('mjSearch').value.trim();
+      const kuOk = q ? kuMatcher(q) : null;
+      if (q && !kuOk) {
+        const ch = resolveQuery(q);
+        const only = new Set(ch ? [ch] : []);
+        targetChars = targetChars ? new Set([...targetChars].filter(c => only.has(c))) : only;
+      }
+
       let total = 0;
       [1, 2, 3, 4].forEach(level => {
         const chars = allKanjiList[level];
@@ -678,6 +687,7 @@
         for (let i = 0; i < chars.length; i++) {
           const char = chars[i];
           if (targetChars !== null && !targetChars.has(char)) continue;
+          if (kuOk && !kuOk(level, kus[i])) continue;
           items.push({ char, ku: kus[i] });
         }
         if (items.length === 0) return;
@@ -700,7 +710,8 @@
         container.appendChild(grid);
       });
 
-      total += renderGaiji(container, targetChars);
+      // 外字は面区点を持たないので、面区点で絞っているときは出さない
+      if (!kuOk) total += renderGaiji(container, targetChars);
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
       rebuildTree();
@@ -1384,19 +1395,44 @@
       return Array.from(q)[0];
     }
 
+    // 面区点の前方一致。"1" なら1面ぜんぶ、"1-18" なら1面18区ぜんぶ。
+    // 点まで書かれた "1-18-81" は resolveQuery が1字に解決するのでここでは受けない。
+    // 面は水準から決まる（第1〜3水準=面1、第4水準=面2）ので mjmap を読んでいなくても効く。
+    function kuMatcher(q) {
+      const m = /^([12])(?:-(\d{1,2}))?$/.exec(q);
+      if (!m) return null;
+      const men = +m[1], ku = m[2] == null ? null : +m[2];
+      return (level, cardKu) => (level === 4 ? 2 : 1) === men && (ku === null || cardKu === ku);
+    }
+
     function runSearch() {
-      const ch = resolveQuery(el("mjSearch").value);
+      const q = el("mjSearch").value.trim();
+      renderKanji(); // 検索も絞り込みなので一覧ごと組み直す（末尾で rebuildTree される）
       const st = el("mjmapStatus");
+      if (!q) {
+        st.textContent = mjmap
+          ? `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`
+          : "mjmap.json を選択してください";
+        return;
+      }
+      if (kuMatcher(q)) { st.textContent = `${q} に ${listOrder.length.toLocaleString()}字`; return; }
+      const ch = resolveQuery(q);
       if (!ch) { st.textContent = "見つかりませんでした"; return; }
       const mjs = mjByChar.get(ch) || [];
-      const into = mjs.length;
       const outOf = new Set();
       mjs.forEach(i => (candByMj.get(i) || []).forEach(([ji]) => { if (jisCh[ji] !== ch) outOf.add(mjmap.jis[ji][0]); }));
-      st.textContent = `「${ch}」 縮退元 ${into}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
-
-      if (!jumpToChar(ch)) st.textContent += " ※一覧に無い字";
+      st.textContent = `「${ch}」 縮退元 ${mjs.length}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
+      if (!listOrder.some(it => it.char === ch)) st.textContent += " ※一覧に無い字";
     }
-    el("mjSearch").addEventListener("keydown", e => { if (e.key === "Enter") runSearch(); });
+
+    // 入力のたびに絞る。一覧の組み直しは重いので少し待つ（IME変換中は確定まで待つ）
+    let searchTimer = 0;
+    const scheduleSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 250); };
+    ["input", "compositionend"].forEach(ev =>
+      el("mjSearch").addEventListener(ev, e => { if (!e.isComposing) scheduleSearch(); }));
+    el("mjSearch").addEventListener("keydown", e => {
+      if (e.key === "Enter") { clearTimeout(searchTimer); runSearch(); }
+    });
 
     // 共通ユーティリティ
     function copyText(text, label) {
