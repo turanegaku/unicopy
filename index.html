@@ -89,6 +89,11 @@
     .find-row { display: flex; gap: 10px; align-items: center; width: 100%; flex-wrap: wrap; }
     .find-row input[type="text"] { padding: 7px 9px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; flex: 1; min-width: 200px; font-size: 0.95rem; }
     .find-row .status { color: #7f8c8d; font-size: 0.85rem; }
+    /* 一覧の見出しへ飛ぶチップ。54,402枚をスクロールで辿らずに済ませる */
+    .jump-row { gap: 6px; }
+    .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
+    .jump-chip:hover { background: #f4f9fd; border-color: currentColor; }
+    .jump-chip .n { color: #b2bec3; font-weight: normal; margin-left: 4px; }
     .legend { flex-basis: 100%; font-size: 0.7rem; color: #95a5a6; border-top: 1px solid #f0f0f0; padding-top: 7px; }
     .legend a { color: #95a5a6; }
     .legend b { color: #7f8c8d; }
@@ -173,6 +178,10 @@
       <div class="legend"><b>実線</b>=規格（同じ文字）　<b class="law">破線</b>=法令・告示（読み替え）　<b class="kj">橙</b>=<a href="docs/jyouyou-kyuujitai.md">常用漢字表の新旧字体</a><span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
     </div>
     <div class="search-container" id="radicalListboxes">
+      <div class="find-row jump-row">
+        <span class="bar-label">移動</span>
+        <span id="sectionJump"></span>
+      </div>
       <div class="find-row">
         <span class="bar-label">検索</span>
         <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81 / 1-18" disabled>
@@ -739,7 +748,44 @@
       if (!kuOk) total += renderGaiji(container, targetChars);
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
+      buildSectionJump(container);
       rebuildTree();
+    }
+
+    /* ---- 見出しへ飛ぶチップ ----
+       一覧は5万枚を超えるので、スクロールだけでは記号も外字も辿り着けない。
+       見出しは renderKanji が組んだものをそのまま使い、件数は次に来るグリッドの枚数で数える。 */
+    function buildSectionJump(container) {
+      const bar = document.getElementById('sectionJump');
+      bar.innerHTML = '';
+      container.querySelectorAll('.level-separator').forEach(sep => {
+        const grid = sep.nextElementSibling;
+        const n = grid && grid.classList.contains('grid') ? grid.children.length : 0;
+        const lv = (sep.className.match(/lvl(\d)/) || [])[1];
+        const b = document.createElement('button');
+        b.className = 'jump-chip';
+        b.style.color = LEVEL_COLOR[lv] || LEVEL_COLOR[5];
+        b.innerHTML = `${sep.textContent.trim()}<span class="n">${n.toLocaleString()}</span>`;
+        b.onclick = () => scrollToSection(sep);
+        bar.appendChild(b);
+      });
+    }
+
+    // 見出しは sticky で上端に貼り付くので位置の基準にならない。次に来るグリッドから測り、
+    // 見出しの高さぶん手前に止める。ツリーONのときは一覧が独自のスクロールコンテナになる。
+    function scrollToSection(sep) {
+      const grid = sep.nextElementSibling;
+      if (!grid) return;
+      const head = sep.offsetHeight + 8;
+      if (!document.body.classList.contains('tree-on')) {
+        window.scrollTo(0, window.scrollY + grid.getBoundingClientRect().top - head);
+        return;
+      }
+      driver = 'list';
+      const pane = el('kanjiContainer');
+      pane.scrollTop = paneTop(grid, pane) - head;
+      lastListTop = pane.scrollTop;
+      syncTree();
     }
 
     function createKanjiCard(char, level, ku, kuLabel, parent) {
