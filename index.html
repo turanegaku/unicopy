@@ -809,6 +809,11 @@
     const showKyuu = { law: false, kyuu: true };
     const BIT_KYUUJITAI = 1 << 5; // 常用漢字表のいわゆる康熙字典体（docs/jyouyou-kyuujitai.md）
 
+    // ---- ツリーの開閉だけ localStorage に覚える（読めない環境では黙って既定に倒す） ----
+    const TREE_PREF = "unicopy.treeOpen";
+    const treeWasOpen = () => { try { return localStorage.getItem(TREE_PREF) === "1"; } catch { return false; } };
+    const saveTreeOpen = on => { try { localStorage.setItem(TREE_PREF, on ? "1" : "0"); } catch { } };
+
     // ---- IndexedDB（mjmap.json は 4〜5MB あり localStorage には入らない） ----
     function idb(mode, fn) {
       return new Promise((res, rej) => {
@@ -872,6 +877,7 @@
       el("treeToggle").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
+      if (treeWasOpen()) el("treeToggle").click(); // 一覧を描いてからでないと同期の基準が無い
     }
 
     // 表示する根拠の段だけでエッジを張り直す。段を切ると縮退先が無くなるMJは外字へ回る
@@ -1306,6 +1312,7 @@
     el("treeToggle").addEventListener("change", e => {
       const on = e.target.checked;
       document.body.classList.toggle("tree-on", on);
+      saveTreeOpen(on);
       if (on) { curAnchor = -1; lastListTop = lastTreeTop = -1; syncTree(); }
     });
 
