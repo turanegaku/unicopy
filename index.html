@@ -47,6 +47,8 @@
     .level-separator.lvl5 span::before, .level-separator.lvl5 span::after { background-color: #7f8c8d; }
     /* JIS水準の並びとは別物なので、見出しを一段強く離す */
     .level-separator.lvl5 { margin-top: 60px; border-top: 3px double #bdc3c7; padding-top: 22px; }
+    /* 記号は一覧の先頭に置くので、外字のような強い区切りは要らない */
+    .level-separator.lvl5.sym { margin-top: 0; border-top: none; padding-top: 0; }
 
     /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
        カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
@@ -70,6 +72,8 @@
     .kana-label { flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 1.6rem; background: #eef6fc; color: #2c3e50; border-radius: 6px; }
     .kana-line .hentai-grid { flex: 1; }
     .hentai-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    /* くの字点は上半分と下半分の2字で1つの記号になる縦書き用。横に並べると形にならないので縦に組む */
+    .card.kana-vert .char-main { writing-mode: vertical-rl; line-height: 1; margin: 0 auto 5px; }
     .hentai-meta { font-size: 0.75rem; color: #666; display: flex; flex-direction: column; gap: 2px; }
     .hentai-meta span { background: #eee; padding: 2px 5px; border-radius: 3px; }
 
@@ -555,6 +559,24 @@
       base, jibo, uni: "U+1B" + hex3, char: String.fromCodePoint(parseInt("1B" + hex3, 16))
     }));
 
+    // JIS漢字の一覧に入らない記号。Ideographic ではないので水準の生成から漏れるが、
+    // 漢字に添えて使うのでコピーできるようにしておく。面区点は mjmap から引けるものだけ出す。
+    const KANJI_SYMBOLS = [
+      ["々", "同の字点"], ["〻", "二の字点"], ["〆", "しめ"], ["〇", "漢数字のゼロ"], ["ヶ", "箇"],
+    ];
+    const SYMBOL_CHARS = new Set(KANJI_SYMBOLS.map(([ch]) => ch));
+
+    // かなの繰り返し記号（踊り字）。変体仮名と同じ用途で使うので同じ画面に置く。
+    // くの字点は上半分と下半分の2文字を並べて1つの記号になる（縦書き用）。
+    const KANA_REPEATS = [
+      ["ゝ", "U+309D", "繰り返し"],
+      ["ゞ", "U+309E", "繰り返し（濁点）"],
+      ["ヽ", "U+30FD", "カタカナの繰り返し"],
+      ["ヾ", "U+30FE", "カタカナの繰り返し（濁点）"],
+      ["〳〵", "U+3033 U+3035", "くの字点"],
+      ["〴〵", "U+3034 U+3035", "くの字点（濁点）"],
+    ];
+
     // 五十音の行区分（変体仮名モードのセパレーター用）
     const GOJUON_ROWS = [
       { label: "あ行", bases: ["あ","い","う","え","お"] },
@@ -680,6 +702,9 @@
       }
 
       let total = 0;
+      // 記号は水準の並びの外なので先頭に置く。第4水準と外字の間だと 44,349枚 に埋もれる
+      if (!kuOk) total += renderSymbols(container, targetChars);
+
       [1, 2, 3, 4].forEach(level => {
         const chars = allKanjiList[level];
         const kus = kuByLevel[level];
@@ -738,6 +763,29 @@
       container.innerHTML = '';
 
       let total = 0;
+      // 繰り返し記号（踊り字）。五十音の行には属さないので先頭に1行だけ置く
+      const repeatSep = document.createElement('div');
+      repeatSep.className = 'level-separator';
+      repeatSep.innerHTML = '<span>繰り返し記号</span>';
+      container.appendChild(repeatSep);
+      const repeatGrid = document.createElement('div');
+      repeatGrid.className = 'hentai-grid';
+      KANA_REPEATS.forEach(([ch, uni, name]) => {
+        const card = document.createElement('div');
+        card.className = ch.length > 1 ? 'card kana-vert' : 'card'; // 2字=くの字点は縦に組む
+        card.innerHTML = `
+              <span class="char-main">${ch}</span>
+              <div class="hentai-meta">
+                <span>${uni}</span>
+                <span>${name}</span>
+              </div>
+            `;
+        card.onclick = () => copyText(ch, `「${ch}」`);
+        repeatGrid.appendChild(card);
+      });
+      container.appendChild(repeatGrid);
+      total += KANA_REPEATS.length;
+
       GOJUON_ROWS.forEach(row => {
         const baseItems = row.bases.map(base => HENTAIGANA_DATA.filter(d => d.base === base));
         const rowTotal = baseItems.reduce((sum, items) => sum + items.length, 0);
@@ -939,6 +987,34 @@
       return b ? b[2] : "その他";
     }
 
+    /* ---- 一覧に付ける記号セクション ----
+       々〆〇〻ヶ は漢字ではない（Ideographic でない）ので水準の一覧には出ないが、
+       漢字に添えて使うのでここでコピーできるようにする。 */
+    function renderSymbols(container, targetChars) {
+      const items = KANJI_SYMBOLS.filter(([ch]) => targetChars === null || targetChars.has(ch));
+      if (!items.length) return 0;
+
+      const sep = document.createElement("div");
+      sep.className = "level-separator lvl5 sym";
+      sep.innerHTML = "<span>記号</span>";
+      container.appendChild(sep);
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      container.appendChild(grid);
+
+      items.forEach(([ch, name]) => {
+        const card = document.createElement("div");
+        card.className = "card lvl5";
+        card.innerHTML = `<span class="char-main">${ch}</span>`;
+        const jis = charJis.get(ch);
+        card.title = `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`;
+        card.dataset.char = ch;
+        card.onclick = () => copyText(ch, `「${ch}」`);
+        grid.appendChild(card);
+      });
+      return items.length;
+    }
+
     /* ---- 一覧の末尾に付ける外字セクション ----
        縮退先が1つも定義されていないMJ字形。ツリーに出すと2万3千行かさばるだけなので、
        一覧側で灰色の1セクションとして眺められるようにする。
@@ -953,6 +1029,7 @@
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
         const ch = cp(m[1]) + (m[2] ? cp(m[2]) : "");
+        if (SYMBOL_CHARS.has(ch)) return; // 記号セクションに出しているので重ねない
         if (targetChars !== null && !targetChars.has(ch)) return;
         items.push({ char: ch, mj: mjName(m[0]), code: parseInt(m[1], 16) });
       });
