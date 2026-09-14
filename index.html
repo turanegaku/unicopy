@@ -121,6 +121,9 @@
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
+    /* ツリーだけ表示。ツリーの幅は5列ぶんで決まっているので、空いた幅は左右に振って中央に置く */
+    body.list-off #kanjiContainer { display: none; }
+    body.list-off #kanjiPanes { justify-content: center; }
 
     .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 0.68rem; color: #7f8c8d; }
     .tree-head div { text-align: center; padding: 6px 0; }
@@ -167,7 +170,9 @@
       <div class="bar-group">
         <span class="bar-label">設定</span>
         <label>データ <input type="file" id="mjmapInput" accept=".json"></label>
-        <label class="switch"><input type="checkbox" id="treeToggle" disabled> 縮退ツリー</label>
+        <span class="bar-label">表示</span>
+        <label class="switch"><input type="checkbox" id="showList" checked> 一覧</label>
+        <label class="switch"><input type="checkbox" id="showTree" disabled> 縮退ツリー</label>
         <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
       </div>
       <div class="bar-group">
@@ -979,10 +984,10 @@
 
       el("mjmapStatus").textContent =
         `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
-      el("treeToggle").disabled = false;
+      el("showTree").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
-      if (treeWasOpen()) el("treeToggle").click(); // 一覧を描いてからでないと同期の基準が無い
+      if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
     // 表示する根拠の段だけでエッジを張り直す。段を切ると縮退先が無くなるMJは外字へ回る
@@ -1361,7 +1366,7 @@
 
     // 一覧 → ツリー
     function syncTree() {
-      if (!mjmap || !treeRows.length || !cardEls.length) return;
+      if (!mjmap || !treeRows.length || !cardEls.length || !showsList()) return;
       const pane = el("kanjiContainer");
       const top = pane.scrollTop;
       let lo = 0, hi = cardEls.length - 1, i = 0;
@@ -1381,7 +1386,7 @@
       if (!r) return;
       setAnchor(r.anchor);
       const pane = el("kanjiContainer"), card = cardEls[r.anchor];
-      if (card) {
+      if (card && showsList()) {
         const want = paneTop(card, pane) - 8;
         if (Math.abs(pane.scrollTop - want) > 1) { pane.scrollTop = want; lastListTop = pane.scrollTop; }
       }
@@ -1443,12 +1448,24 @@
       onContext(e, g && g.dataset.k);
     });
 
-    el("treeToggle").addEventListener("change", e => {
-      const on = e.target.checked;
-      document.body.classList.toggle("tree-on", on);
-      saveTreeOpen(on);
-      if (on) { curAnchor = -1; lastListTop = lastTreeTop = -1; syncTree(); }
-    });
+    /* 一覧とツリーは独立したON/OFFなので、素直にチェック2つで持つ
+       （一覧だけ・ツリーだけ・両方の3通り）。両方OFFは何も見えなくなるだけなので押し返す。 */
+    const showsList = () => el("showList").checked;
+    function applyView(changed) {
+      const list = el("showList"), tree = el("showTree");
+      if (!list.checked && !tree.checked) {
+        if (changed === list && !tree.disabled) tree.checked = true; else list.checked = true;
+      }
+      document.body.classList.toggle("tree-on", tree.checked);
+      document.body.classList.toggle("list-off", !list.checked);
+      saveTreeOpen(tree.checked);
+      // 隠していた側のペインはスクロール位置を保っていないので、残っている側を基準に引き直す
+      if (tree.checked) {
+        curAnchor = -1; lastListTop = lastTreeTop = -1;
+        list.checked ? syncTree() : syncList();
+      }
+    }
+    ["showList", "showTree"].forEach(id => el(id).addEventListener("change", e => applyView(e.target)));
 
     el("fontBadge").addEventListener("click", () => {
       hasIPAmjFont = !hasIPAmjFont;
@@ -1468,7 +1485,12 @@
     function jumpToChar(ch) {
       const i = listOrder.findIndex(it => it.char === ch);
       if (i < 0) return false;
-      if (!document.body.classList.contains("tree-on")) el("treeToggle").click();
+      // 一覧へ飛ぶ操作なので、ツリーだけ表示中でも一覧を出す
+      if (!showsList() || (!document.body.classList.contains("tree-on") && mjmap)) {
+        el("showList").checked = true;
+        if (mjmap) el("showTree").checked = true;
+        applyView();
+      }
       driver = "list";
       const pane = el("kanjiContainer"), card = cardEls[i];
       const top = paneTop(card, pane);
