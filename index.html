@@ -219,10 +219,9 @@
       </div>
       <div class="bar-group">
         <span class="bar-label">縮退の根拠</span>
-        <label class="switch" title="常用漢字表の「いわゆる康熙字典体」。旧字体を新字体に潰す関係で、橙の実線で描く"><input type="checkbox" id="tierKyuu" checked> 新旧字体</label>
-        <label class="switch" title="戸籍法関連通達・告示582号のうち新旧字体以外。人名異体字・俗字・誤字が中心で、灰の破線で描く"><input type="checkbox" id="tierLaw"> その他の法令・告示</label>
+        <span id="srcSwitches"></span>
       </div>
-      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
+      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示　<b>点線</b>=辞書・類推<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
     </div>
     <div class="search-container" id="radicalListboxes">
       <div class="find-row jump-row">
@@ -997,12 +996,26 @@
     const cp = hex => hex ? String.fromCodePoint(parseInt(hex, 16)) : "";
     const push = (map, k, v) => { const a = map.get(k); a ? a.push(v) : map.set(k, [v]); };
     const mjName = num => "MJ" + String(num).padStart(6, "0");
-    // 0=規格(JIS包摂規準・UCS統合規則) 1=法令・告示(戸籍法通達/582号) 2=辞書・類推のみ
-    const tierOf = bits => bits & 1 ? 0 : (bits & 6 ? 1 : 2);
-    // 規格は常時ON、辞書・類推は常時OFF（データには持つが描かない）。
-    // 法令・告示は「常用漢字表の新旧字体」とそれ以外で別々に切り替える。
-    const showKyuu = { law: false, kyuu: true };
-    const BIT_KYUUJITAI = 1 << 5; // 常用漢字表のいわゆる康熙字典体（docs/jyouyou-kyuujitai.md）
+    /* 縮退の根拠。mjmap.json の cand は1エッジにこのビットを複数立てて持つ（meta.bits に同じ並び）。
+       強い順に並べてあり、線種は立っている根拠のうち一番強いもので決める。
+       tier 0=実線（規格）、1=破線（法令・告示）、2=点線（辞書・類推）。新旧字体は橙の実線。
+       常用漢字表の新旧字体は戸籍法通達の部分集合ではない（包摂や582号だけで繋がる組が7本ある）
+       ので独立したビットを持ち、強さの順どおり包摂の次に置いてある。 */
+    const SRC = [
+      { id: "srcJis",   label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
+      { id: "srcKyuu",  label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（466本）" },
+      { id: "src582",   label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等の漢字氏名の表記（12,568本）" },
+      { id: "srcSeiji", label: "親字・正字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
+      { id: "srcZokuji",label: "正字・俗字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "srcGoji",  label: "誤字俗字",   tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
+      { id: "srcDict",  label: "辞書",       tier: 2, on: false, title: "辞書類等による関連字。大漢和辞典・日本語漢字辞典・新大字典・大字源・大漢語林（15,958本）" },
+      { id: "srcGuess", label: "読み・字形", tier: 2, on: false, title: "読み・字形による類推（413本）" },
+    ];
+    SRC.forEach((s, i) => s.bit = 1 << i);
+    const BIT_KYUUJITAI = SRC.find(s => s.kj).bit;
+    const srcMask = () => SRC.reduce((m, s) => m | (s.on ? s.bit : 0), 0);
+    // 立っている根拠のうち一番強いものの段。SRC は強い順なので先に見つかったものが答え
+    const tierOf = bits => (SRC.find(s => bits & s.bit) || { tier: 2 }).tier;
 
     // ---- ツリーの開閉だけ localStorage に覚える（読めない環境では黙って既定に倒す） ----
     const TREE_PREF = "unicopy.treeOpen";
@@ -1090,24 +1103,24 @@
       if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
-    // 表示する根拠の段だけでエッジを張り直す。段を切ると縮退先が無くなるMJは外字へ回る
+    // 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る
     function buildEdges() {
       candByMj.clear(); mjByChar.clear();
+      const mask = srcMask();
       mjmap.cand.forEach(([mi, ji, bits]) => {
-        const t = tierOf(bits);
-        if (t === 2) return;
-        const kj = !!(bits & BIT_KYUUJITAI);
-        if (t === 1 && !(kj ? showKyuu.kyuu : showKyuu.law)) return;
-        push(candByMj, mi, [ji, t, kj]);
+        const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
+        if (!on) return;
+        push(candByMj, mi, [ji, tierOf(on), !!(on & BIT_KYUUJITAI)]);
         push(mjByChar, jisCh[ji], mi);
       });
     }
 
-    [["tierLaw", "law"], ["tierKyuu", "kyuu"]].forEach(([id, key]) =>
-      el(id).addEventListener("change", e => {
-        showKyuu[key] = e.target.checked;
-        if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
-      }));
+    el("srcSwitches").innerHTML = SRC.map(s =>
+      `<label class="switch" title="${s.title}"><input type="checkbox" id="${s.id}"${s.on ? " checked" : ""}> ${s.label}</label>`).join("");
+    SRC.forEach(s => el(s.id).addEventListener("change", e => {
+      s.on = e.target.checked;
+      if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
+    }));
 
     el("mjmapInput").addEventListener("change", e => {
       const f = e.target.files[0];
