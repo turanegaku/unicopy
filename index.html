@@ -64,6 +64,8 @@
     /* 外字（縮退先が定義されていないMJ字形）。IVSを効かせたいのでIPAmj明朝で描く */
     .card.lvl5 { border-top: 4px solid #7f8c8d; }
     .card.lvl5 .char-main { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; }
+    /* IPAmj明朝バッジをOFFにした時。字形描画をその場で切り替えるためのクラス */
+    body.no-mjfont .card.lvl5 .char-main, body.no-mjfont .tree-node .g { font-family: "Noto Serif JP", serif; }
 
     .char-main { font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 2rem; font-weight: 500; display: block; margin-bottom: 5px; line-height: 1.2; }
     
@@ -99,7 +101,7 @@
     .legend b { color: #7f8c8d; }
     .legend b.kj { color: #e67e22; }
     .legend .credit { color: #bdc3c7; }
-    .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    .font-status-btn { padding: 5px 10px; border-radius: 5px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
     .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
     .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
@@ -894,7 +896,8 @@
     const COL_LABEL = ["第1水準", "第2水準", "第3水準", "第4水準", "MJ"];
 
     let mjmap = null;
-    let hasIPAmjFont = false;
+    let ipamjInstalled = false; // IPAmj明朝がこの環境に入っているか（検出結果）
+    let useIPAmj = false;       // 字形の描画にIPAmj明朝を使うか（バッジで切り替える）
     const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
     const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
     const candByMj = new Map();   // MJ index -> [面区点の添字]
@@ -957,14 +960,22 @@
         };
         ok = draw("30px monospace") !== draw("30px 'IPAmj明朝', 'IPAmjMincho', monospace");
       }
-      hasIPAmjFont = ok;
+      ipamjInstalled = ok;
+      useIPAmj = ok;
       updateFontBadge();
     }
 
+    /* バッジが示すのは「いま何のフォントでMJ字形を描いているか」。
+       IPAmj明朝が入っているかどうかは検出結果として title に回す。
+       検出はフォント名の問い合わせしか見ていないので外すことがあり、
+       またIVSはシステムの明朝が持っていれば IPAmj明朝 なしでも描き分かる。 */
     function updateFontBadge() {
       const b = el("fontBadge");
-      b.textContent = hasIPAmjFont ? "IPAmj明朝: 有効" : "IPAmj明朝: 未検出";
-      b.className = "font-status-btn " + (hasIPAmjFont ? "status-active" : "status-inactive");
+      b.textContent = useIPAmj ? "MJ字形: IPAmj明朝" : "MJ字形: 既定の明朝";
+      b.className = "font-status-btn " + (useIPAmj ? "status-active" : "status-inactive");
+      b.title = (ipamjInstalled ? "IPAmj明朝を検出しました。" : "IPAmj明朝は検出できませんでした（入っていても検出を外すことがあります）。")
+        + "クリックで描画に使う/使わないを切り替えます";
+      document.body.classList.toggle("no-mjfont", !useIPAmj);
     }
 
     // ---- mjmap.json の取り込み ----
@@ -1468,7 +1479,7 @@
     ["showList", "showTree"].forEach(id => el(id).addEventListener("change", e => applyView(e.target)));
 
     el("fontBadge").addEventListener("click", () => {
-      hasIPAmjFont = !hasIPAmjFont;
+      useIPAmj = !useIPAmj;
       updateFontBadge();
     });
 
