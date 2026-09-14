@@ -47,8 +47,8 @@
     .level-separator.lvl5 span::before, .level-separator.lvl5 span::after { background-color: #7f8c8d; }
     /* JIS水準の並びとは別物なので、見出しを一段強く離す */
     .level-separator.lvl5 { margin-top: 60px; border-top: 3px double #bdc3c7; padding-top: 22px; }
-    /* 記号は一覧の先頭に置くので、外字のような強い区切りは要らない */
-    .level-separator.lvl5.sym { margin-top: 0; border-top: none; padding-top: 0; }
+    /* 記号や外字の2区分目以降は、前の区分に続くので強い区切りを外す */
+    .level-separator.lvl5.flat { margin-top: 0; border-top: none; padding-top: 0; }
 
     /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
        カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
@@ -117,6 +117,24 @@
     /* データを読めているかどうかは丸の色で示す。どこから読んだかは title に回す */
     .file-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #dfe4e6; margin-right: 6px; vertical-align: 1px; }
     .file-btn.ready .dot { background: #27ae60; }
+
+    /* appearance: base-select にすると候補リストが ::picker(select) として CSS の対象になり、
+       max-height で行数を抑えられる（OS描画のままだと高さは指定できない）。
+       対応していないブラウザはこの宣言を捨ててネイティブ描画に落ちるだけで、動作は変わらない。
+       キー操作・タイプアヘッド・支援技術は <select> のものをそのまま使う。 */
+    select.sel, select.sel::picker(select) { appearance: base-select; }
+    select.sel { padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer;
+                 font-family: inherit; font-size: 0.78rem; font-weight: bold; color: #2c3e50; }
+    select.sel:hover, select.sel:open { border-color: #3498db; }
+    select.sel::picker(select) { max-height: 16em; overflow-y: auto; margin-top: 3px; padding: 4px;
+                                 border: 1px solid #d5dbdb; border-radius: 6px; background: #fff;
+                                 box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+    select.sel optgroup { padding: 6px 8px 2px; font-size: 0.68rem; font-weight: bold; color: #95a5a6; letter-spacing: 1px; }
+    select.sel option { padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: normal; color: #2c3e50; }
+    select.sel option:hover { background: #ebf5fb; }
+    select.sel option:checked { background: #3498db; color: #fff; font-weight: bold; }
+    select.sel option::checkmark { display: none; }
+
     .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
     .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
@@ -210,6 +228,7 @@
         <span class="bar-label">絞り込み</span>
         <div class="row-body">
           <label class="switch"><input type="checkbox" id="onlyJinmei"> 人名用漢字だけ (864字)</label>
+          <select id="kuFilter" class="sel"></select>
         </div>
       </div>
       <div class="find-row" id="searchRow">
@@ -731,6 +750,7 @@
       if (checked) checked.checked = false;
       lastRadical = null;
       el('onlyJinmei').checked = false;
+      el('kuFilter').value = '';
       renderKanji();
     }
 
@@ -750,20 +770,20 @@
         targetChars = targetChars ? new Set([...targetChars].filter(c => JINMEI_CHARS.has(c))) : new Set(JINMEI_CHARS);
       }
 
-      // 検索欄も絞り込みとして効かせる。面区点の前方一致は面・区で、それ以外は1字に解決して絞る
+      // 区の絞り込みは「面区」か「外字のブロック」のどちらか。検索欄は字の絞り込みとして別に効かせる
+      const kuOk = kuMatcher();
+      const blk = blockValue();
       const q = document.getElementById('mjSearch').value.trim();
-      const kuOk = q ? kuMatcher(q) : null;
-      if (q && !kuOk) {
-        const ch = resolveQuery(q);
-        const only = new Set(ch ? [ch] : []);
+      if (q) {
+        const only = new Set([resolveQuery(q)].filter(Boolean));
         targetChars = targetChars ? new Set([...targetChars].filter(c => only.has(c))) : only;
       }
 
       let total = 0;
       // 記号は水準の並びの外なので先頭に置く。第4水準と外字の間だと 44,349枚 に埋もれる
-      if (!kuOk) total += renderSymbols(container, targetChars);
+      if (!kuOk && !blk) total += renderSymbols(container, targetChars);
 
-      [1, 2, 3, 4].forEach(level => {
+      if (!blk) [1, 2, 3, 4].forEach(level => {
         const chars = allKanjiList[level];
         const kus = kuByLevel[level];
         const items = []; // [{char, ku}] フィルタを適用した並び（区点の昇順を維持）
@@ -794,7 +814,7 @@
       });
 
       // 外字は面区点を持たないので、面区点で絞っているときは出さない
-      if (!kuOk) total += renderGaiji(container, targetChars);
+      if (!kuOk) total += renderGaiji(container, targetChars, blk);
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
       buildSectionJump(container);
@@ -1046,6 +1066,7 @@
       el("showTree").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
+      fillGaijiBlocks();
       if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
@@ -1065,7 +1086,7 @@
     [["tierLaw", "law"], ["tierKyuu", "kyuu"]].forEach(([id, key]) =>
       el(id).addEventListener("change", e => {
         showKyuu[key] = e.target.checked;
-        if (mjmap) { buildEdges(); renderKanji(); }
+        if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
       }));
 
     el("mjmapInput").addEventListener("change", e => {
@@ -1105,7 +1126,7 @@
       if (!items.length) return 0;
 
       const sep = document.createElement("div");
-      sep.className = "level-separator lvl5 sym";
+      sep.className = "level-separator lvl5 flat";
       sep.innerHTML = "<span>記号</span>";
       container.appendChild(sep);
       const grid = document.createElement("div");
@@ -1129,7 +1150,7 @@
        縮退先が1つも定義されていないMJ字形。ツリーに出すと2万3千行かさばるだけなので、
        一覧側で灰色の1セクションとして眺められるようにする。
        （縮退先を持つJIS外のMJ字形はツリーのMJ列に出るので、ここには入らない） */
-    function renderGaiji(container, targetChars) {
+    function renderGaiji(container, targetChars, blk) {
       if (!mjmap) return 0;
       const items = [];
       mjmap.mj.forEach((m, i) => {
@@ -1138,16 +1159,19 @@
         // charLevel は第1〜4水準だけを持つ（外字は入れない）ので、この has() は水準字かどうかを見る
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
-        const ch = cp(m[1]) + (m[2] ? cp(m[2]) : "");
+        const base = cp(m[1]);
+        const ch = base + (m[2] ? cp(m[2]) : "");
         if (SYMBOL_CHARS.has(ch)) return; // 記号セクションに出しているので重ねない
         if (targetChars !== null && !targetChars.has(ch)) return;
-        items.push({ char: ch, mj: mjName(m[0]), code: parseInt(m[1], 16) });
+        const code = parseInt(m[1], 16);
+        if (blk && cjkBlock(code) !== blk) return;
+        items.push({ char: ch, base, mj: mjName(m[0]), code });
       });
       if (!items.length) return 0;
       items.sort((a, b) => a.code - b.code || a.mj.localeCompare(b.mj));
 
-      // ブロックは 拡張A/統合/互換/拡張B〜F にまたがるが、見出しを分けるとかさばるので
-      // 1項目にまとめ、どのブロックの字かは各カードの tooltip に出す
+      // 外字は面区点を持たないので、水準側の「区」の札にあたるものがUnicodeブロックになる。
+      // 区分を分けずに1本のグリッドのまま、ブロックが変わった最初のカードだけ札を出す。
       const sep = document.createElement("div");
       sep.className = "level-separator lvl5";
       sep.innerHTML = "<span>MJ外字</span>";
@@ -1156,13 +1180,16 @@
       grid.className = "grid";
       container.appendChild(grid);
 
+      let prevBlock = null;
       items.forEach(it => {
+        const blockName = cjkBlock(it.code);
+        const label = blockName !== prevBlock ? `<span class="ku-tag">${blockName}</span>` : "";
+        prevBlock = blockName;
         const card = document.createElement("div");
         card.className = "card lvl5";
-        card.innerHTML = `<span class="char-main">${it.char}</span>`;
-        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${cjkBlock(it.code)}`;
+        card.innerHTML = `${label}<span class="char-main">${it.char}</span>`;
+        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${blockName}`;
         card.dataset.char = it.char;
-        card.dataset.i = listOrder.length;
         card.onclick = () => copyText(it.char, `「${it.char}」`);
         grid.appendChild(card);
         listOrder.push({ char: it.char, level: 5, mj: it.mj });
@@ -1599,14 +1626,55 @@
       return Array.from(q)[0];
     }
 
-    // 面区点の前方一致。"1" なら1面ぜんぶ、"1-18" なら1面18区ぜんぶ。
-    // 点まで書かれた "1-18-81" は resolveQuery が1字に解決するのでここでは受けない。
-    // 面は水準から決まる（第1〜3水準=面1、第4水準=面2）ので mjmap を読んでいなくても効く。
-    function kuMatcher(q) {
-      const m = /^([12])(?:-(\d{1,2}))?$/.exec(q);
-      if (!m) return null;
-      const men = +m[1], ku = m[2] == null ? null : +m[2];
-      return (level, cardKu) => (level === 4 ? 2 : 1) === men && (ku === null || cardKu === ku);
+    /* 区の絞り込み。面区（1-16 など）と MJ外字のブロック（CJK拡張A など）を1つの箱に入れ、
+       どの水準の区なのかは optgroup で束ねる。面は水準から決まる（第1〜3水準=1面、第4水準=2面）
+       ので、面区のほうは mjmap を読んでいなくても効く。 */
+    const kuValue = () => el("kuFilter").value;
+    const blockValue = () => kuValue().startsWith("blk:") ? kuValue().slice(4) : null;
+    function kuMatcher() {
+      const v = kuValue();
+      if (!v || blockValue()) return null;
+      const men = +v.slice(0, 1), ku = +v.slice(2);
+      return (level, cardKu) => (level === 4 ? 2 : 1) === men && cardKu === ku;
+    }
+    function buildKuFilter() {
+      const sel = el("kuFilter");
+      sel.innerHTML = '<option value="">区: すべて</option>';
+      [1, 2, 3, 4].forEach(lv => {
+        const men = lv === 4 ? 2 : 1;
+        const ks = [...new Set(kuByLevel[lv].map(ku => `${men}-${String(ku).padStart(2, "0")}`))].sort();
+        if (!ks.length) return;
+        const g = document.createElement("optgroup");
+        g.label = `第${lv}水準`;
+        ks.forEach(k => g.appendChild(new Option(k, k)));
+        sel.appendChild(g);
+      });
+      sel.addEventListener("change", runSearch);
+    }
+
+    /* 外字のブロックは mjmap を読まないと分からないので、読み込んだあとで足す。
+       縮退の根拠を切ると外字に回る字が変わるので、そのたびに引き直す。 */
+    function fillGaijiBlocks() {
+      const sel = el("kuFilter");
+      const keep = sel.value;
+      const old = sel.querySelector('optgroup[label="MJ外字"]');
+      if (old) old.remove();
+      const seen = new Set();
+      mjmap.mj.forEach((m, i) => {
+        if (!m[1]) return;
+        const to = candByMj.get(i);
+        if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
+        if (SYMBOL_CHARS.has(cp(m[1]) + (m[2] ? cp(m[2]) : ""))) return; // 記号は外字に出さない
+        seen.add(cjkBlock(parseInt(m[1], 16)));
+      });
+      const g = document.createElement("optgroup");
+      g.label = "MJ外字";
+      CJK_BLOCKS.map(b => b[2]).concat("その他").forEach(name => {
+        if (seen.has(name)) g.appendChild(new Option(name, "blk:" + name));
+      });
+      sel.appendChild(g);
+      sel.value = keep;
+      if (!sel.value) sel.value = ""; // 消えたブロックを選んでいたら「すべて」に戻す
     }
 
     function runSearch() {
@@ -1653,6 +1721,7 @@
     // 初期化実行
     window.onload = () => {
       initData();
+      buildKuFilter(); // 面区の選択肢は initData が並べた区データから作る
       buildRadicalListboxes();
       renderKanji();
       renderHentaigana();
