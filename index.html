@@ -654,6 +654,7 @@
     // --- 漢字モードのUI制御 ---
     // 構成要素ごとにradioグループを並べる。全radioがname="radical"を共有するため、
     // 唯一選択はブラウザのネイティブ挙動そのもの（JSでの排他制御は不要）。
+    let lastRadical = null; // 直前に選ばれた部首。同じものを押し直したときの解除に使う
     function buildRadicalListboxes() {
       const wrap = document.getElementById('radicalListboxes');
       const grid = document.createElement('div');
@@ -679,7 +680,13 @@
           radio.type = 'radio';
           radio.name = 'radical';
           radio.value = `${part}::${rad}`;
-          radio.onchange = renderKanji;
+          // radio は checked のままだと change が出ないので click で見る。
+          // 同じものをもう一度押したら解除＝「部首で絞らない」に戻す
+          radio.onclick = () => {
+            if (radio === lastRadical) { radio.checked = false; lastRadical = null; }
+            else lastRadical = radio;
+            renderKanji();
+          };
           chip.appendChild(radio);
           chip.appendChild(document.createTextNode(glyph));
           row.appendChild(chip);
@@ -699,6 +706,7 @@
     function clearKanjiSearch() {
       const checked = document.querySelector('input[name="radical"]:checked');
       if (checked) checked.checked = false;
+      lastRadical = null;
       renderKanji();
     }
 
