@@ -88,11 +88,20 @@
     .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
     .bar-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .bar-label { font-weight: bold; color: #95a5a6; font-size: 0.72rem; letter-spacing: 1px; }
-    .find-row { display: flex; gap: 10px; align-items: center; width: 100%; flex-wrap: wrap; }
-    .find-row input[type="text"] { padding: 7px 9px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; flex: 1; min-width: 200px; font-size: 0.95rem; }
-    .find-row .status { color: #7f8c8d; font-size: 0.85rem; }
+    /* 移動・絞り込み・検索は「ラベル | 中身」の2列グリッドに揃える。
+       ラベル幅を固定しないと行ごとに中身の左端がずれ、右端も揃わない。 */
+    /* ラベル列は一番長い「絞り込み」(0.72rem・字間1px)がちょうど収まる幅にする。
+       各行が別のグリッドなので auto にすると行ごとに幅が変わり、中身の左端が揃わない。 */
+    .find-row { display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: center; width: 100%; }
+    .find-row > .row-body { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+    .find-row input[type="text"] { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; font-size: 0.95rem; }
+    .find-row input[type="text"]:focus { outline: none; border-color: #3498db; }
+    .find-row .status { grid-column: 2; color: #7f8c8d; font-size: 0.8rem; min-height: 1em; }
+    /* 検索はラベルを placeholder に畳んだので、1列にして容器の幅いっぱいまで広げる */
+    #searchRow { grid-template-columns: 1fr; }
+    #searchRow .status { grid-column: 1; }
     /* 一覧の見出しへ飛ぶチップ。54,402枚をスクロールで辿らずに済ませる */
-    .jump-row { gap: 6px; }
+    .jump-row .row-body { gap: 6px; }
     .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
     .jump-chip:hover { background: #f4f9fd; border-color: currentColor; }
     .jump-chip .n { color: #b2bec3; font-weight: normal; margin-left: 4px; }
@@ -125,7 +134,9 @@
        ページ自体は普通にスクロールし、ヘッダと部首フィルタは上へ流れて消える。
        そのぶんペインは常に画面の高さいっぱいを使える。 */
     body.tree-on #kanjiPanes { position: sticky; top: 8px; height: calc(100vh - 16px); }
-    body.tree-on #radicalListboxes { max-height: 40vh; overflow-y: auto; }
+    /* ツリーONのときに縮めるのは部首のグリッドだけ。容器ごと縮めると、
+       グリッドの下に置いた検索欄とCLEARがスクロールの外へ隠れてしまう */
+    body.tree-on .radical-grid { max-height: 28vh; overflow-y: auto; }
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
@@ -193,12 +204,16 @@
     <div class="search-container" id="radicalListboxes">
       <div class="find-row jump-row">
         <span class="bar-label">移動</span>
-        <span id="sectionJump"></span>
+        <span class="row-body" id="sectionJump"></span>
       </div>
       <div class="find-row">
-        <span class="bar-label">検索</span>
-        <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81 / 1-18" disabled>
-        <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
+        <span class="bar-label">絞り込み</span>
+        <div class="row-body">
+        </div>
+      </div>
+      <div class="find-row" id="searchRow">
+        <input type="text" id="mjSearch" placeholder="検索　会 / U+4F1A / MJ006586 / 1-18-81" disabled>
+        <span class="status" id="mjmapStatus"></span>
       </div>
     </div>
     <div id="kanjiPanes">
@@ -695,6 +710,7 @@
         grid.appendChild(group);
       });
       wrap.appendChild(grid);
+      wrap.appendChild(el('searchRow')); // 検索は部首の下＝CLEARの真上に置く
 
       const clearBtn = document.createElement('button');
       clearBtn.className = 'clear-btn';
