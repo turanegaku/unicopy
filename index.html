@@ -751,6 +751,8 @@
       lastRadical = null;
       el('onlyJinmei').checked = false;
       el('kuFilter').value = '';
+      el('mjSearch').value = '';
+      el('mjmapStatus').textContent = '';
       renderKanji();
     }
 
@@ -775,7 +777,7 @@
       const blk = blockValue();
       const q = document.getElementById('mjSearch').value.trim();
       if (q) {
-        const only = new Set([resolveQuery(q)].filter(Boolean));
+        const only = resolveQuery(q);
         targetChars = targetChars ? new Set([...targetChars].filter(c => only.has(c))) : only;
       }
 
@@ -1061,8 +1063,7 @@
       buildEdges();
 
       setDataState(true, `読込済み（${DATA_SOURCE[source] || "不明"}）／クリックで別のファイルを読む`);
-      el("mjmapStatus").textContent =
-        `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
+      el("mjmapStatus").textContent = "";
       el("showTree").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
@@ -1612,18 +1613,44 @@
       return true;
     }
 
-    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 の4通りを受ける ---- */
+    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 を受け、当たった字の集合を返す ----
+       MJ番号と符号位置は前方一致でも拾う。MJ0068 なら MJ006800〜MJ006899 が、
+       U+4F1 なら U+4F10〜U+4F1F がまとめて当たる。桁を全部打てば従来どおり1字になる。
+       MJ字形はIVS付きの札でも一覧に出ているので、基底とIVS付きの両方を集合に入れる。 */
     function resolveQuery(q) {
       q = q.trim();
-      if (!q) return null;
+      const out = new Set();
+      if (!q) return out;
       let m;
-      if (m = /^MJ(\d{6})$/i.exec(q)) { const i = mjIndex.get("MJ" + m[1]); return i == null ? null : cp(mjmap.mj[i][1]); }
-      if (m = /^U\+?([0-9a-f]{4,6})$/i.exec(q)) return String.fromCodePoint(parseInt(m[1], 16));
-      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
-        const k = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-        return jisChar.get(k) || null;
+      if (m = /^MJ(\d{1,6})$/i.exec(q)) {
+        // 桁を揃えて打っても（MJ0068）、頭の0を省いて打っても（MJ89）前方一致で拾う
+        const dig = m[1];
+        if (mjmap) mjmap.mj.forEach(x => {
+          const n = String(x[0]);
+          if (!x[1] || !(n.padStart(6, "0").startsWith(dig) || n.startsWith(dig))) return;
+          out.add(cp(x[1]));
+          if (x[2]) out.add(cp(x[1]) + cp(x[2]));
+        });
+        return out;
       }
-      return Array.from(q)[0];
+      if (m = /^U\+?([0-9a-f]{1,6})$/i.exec(q)) {
+        const pre = m[1].toUpperCase();
+        const hex = c => c.codePointAt(0).toString(16).toUpperCase();
+        [1, 2, 3, 4].forEach(lv => allKanjiList[lv].forEach(c => { if (hex(c).startsWith(pre)) out.add(c); }));
+        if (mjmap) mjmap.mj.forEach(x => {
+          if (!x[1] || !x[1].toUpperCase().replace(/^0+/, "").startsWith(pre.replace(/^0+/, ""))) return;
+          out.add(cp(x[1]));
+          if (x[2]) out.add(cp(x[1]) + cp(x[2]));
+        });
+        return out;
+      }
+      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
+        const ch = jisChar.get(`${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`);
+        if (ch) out.add(ch);
+        return out;
+      }
+      Array.from(q).forEach(c => out.add(c));
+      return out;
     }
 
     /* 区の絞り込み。面区（1-16 など）と MJ外字のブロック（CJK拡張A など）を1つの箱に入れ、
@@ -1681,20 +1708,15 @@
       const q = el("mjSearch").value.trim();
       renderKanji(); // 検索も絞り込みなので一覧ごと組み直す（末尾で rebuildTree される）
       const st = el("mjmapStatus");
-      if (!q) {
-        st.textContent = mjmap
-          ? `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`
-          : "mjmap.json を選択してください";
-        return;
-      }
-      if (kuMatcher(q)) { st.textContent = `${q} に ${listOrder.length.toLocaleString()}字`; return; }
-      const ch = resolveQuery(q);
-      if (!ch) { st.textContent = "見つかりませんでした"; return; }
+      if (!q) { st.textContent = ""; return; }
+      if (!listOrder.length) { st.textContent = "一覧に該当なし"; return; }
+      // 一覧が1枚に絞れたときだけ縮退の中身まで出す。前方一致で広く当たったときは件数だけ
+      if (listOrder.length !== 1) { st.textContent = `${listOrder.length.toLocaleString()}字が該当`; return; }
+      const ch = Array.from(listOrder[0].char)[0]; // 外字のカードはIVS付きなので基底を見る
       const mjs = mjByChar.get(ch) || [];
       const outOf = new Set();
       mjs.forEach(i => (candByMj.get(i) || []).forEach(([ji]) => { if (jisCh[ji] !== ch) outOf.add(mjmap.jis[ji][0]); }));
       st.textContent = `「${ch}」 縮退元 ${mjs.length}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
-      if (!listOrder.some(it => it.char === ch)) st.textContent += " ※一覧に無い字";
     }
 
     // 入力のたびに絞る。一覧の組み直しは重いので少し待つ（IME変換中は確定まで待つ）
