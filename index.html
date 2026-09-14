@@ -1019,14 +1019,14 @@
        常用漢字表の新旧字体は戸籍法通達の部分集合ではない（包摂や582号だけで繋がる組が7本ある）
        ので独立したビットを持ち、強さの順どおり包摂の次に置いてある。 */
     const SRC = [
-      { id: "srcJis",   label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
-      { id: "srcKyuu",  label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（466本）" },
-      { id: "src582",   label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等の漢字氏名の表記（12,568本）" },
-      { id: "srcSeiji", label: "親字・正字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
-      { id: "srcZokuji",label: "正字・俗字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
-      { id: "srcGoji",  label: "誤字俗字",   tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
-      { id: "srcDict",  label: "辞書",       tier: 2, on: false, title: "辞書類等による関連字。大漢和辞典・日本語漢字辞典・新大字典・大字源・大漢語林（15,958本）" },
-      { id: "srcGuess", label: "読み・字形", tier: 2, on: false, title: "読み・字形による類推（413本）" },
+      { id: "srcJis",    label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
+      { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（466本）" },
+      { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
+      { id: "srcGoji",   label: "誤字俗字",   tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
+      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "src582",    label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等に係る漢字氏名の表記（12,568本）" },
+      { id: "srcDict",   label: "辞書",       tier: 2, on: false, title: "辞書類等による関連字（15,958本）" },
+      { id: "srcGuess",  label: "読み・字形", tier: 2, on: false, title: "読み・字形による類推（413本）" },
     ];
     SRC.forEach((s, i) => s.bit = 1 << i);
     const BIT_KYUUJITAI = SRC.find(s => s.kj).bit;
