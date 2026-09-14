@@ -786,7 +786,7 @@
       const blk = blockValue();
       const q = document.getElementById('mjSearch').value.trim();
       if (q) {
-        const only = resolveQuery(q);
+        const only = withShrinkTargets(resolveQuery(q));
         targetChars = targetChars ? new Set([...targetChars].filter(c => only.has(c))) : only;
       }
 
@@ -831,6 +831,23 @@
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
       buildSectionJump(container);
       rebuildTree();
+    }
+
+    /* ---- 検索で当たった字の縮退先も一覧に入れる ----
+       旧字体だけを出すと、その字の群は縮退先を1行にまとめて「国—國—國」と描く。
+       これは1つのMJ字形が2つの面区点へ縮退していることの正しい表示だが、
+       縮退の向き（國 が 国 へ潰れる）は読み取れない。
+       終着点の 国 を一覧に入れれば 国 の群が出て、國 はその枝として下がる。
+       その字を字形として持つMJ（基底が一致するMJ）だけを辿るので、
+       たまたま同じ縮退先を持つだけの字までは引き込まない。 */
+    function withShrinkTargets(chars) {
+      if (!mjmap) return chars;
+      const out = new Set(chars);
+      chars.forEach(ch => (mjByChar.get(ch) || []).forEach(mi => {
+        if (mjBase[mi] !== ch) return;
+        (candByMj.get(mi) || []).forEach(([ji]) => out.add(jisCh[ji]));
+      }));
+      return out;
     }
 
     /* ---- 見出しへ飛ぶチップ ----
