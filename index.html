@@ -1140,19 +1140,33 @@
       if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
-    // 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る
+    /* 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る。
+       ただし、その面区点のJIS例示字形（X0213 包摂区分0＝mjmap.json の rep）への
+       エッジは根拠の選択に関わらず残す。縮退マップはこれを包摂規準のエッジとして
+       持っている（MJ自身の面区点は別枠では持っていない）が、中身は縮退ではなく
+       「この字形がこの面区点の字である」という1:1の対応なので、包摂を外したからと
+       いって消してよいものではない。消すと 亜(1-16-01) の字形 MJ006454 や
+       亞(1-48-19) が丸ごと落ちて、亞→亜 の新旧字体だけが宙に浮いた1行になる。
+
+       残すのは例示字形の1本だけ。基底の符号位置が同じでも例示字形でないMJ
+       （医+E0102=MJ007821 が 1-16-69 へ、醫+E0102=MJ026548 が 1-78-48 へ）は
+       字形が違うので、その面区点との関係は1:1ではなく包摂である。
+       10,909本ある例示字形のエッジは全て包摂規準として入っていることを確かめてある。 */
     function buildEdges() {
       candByMj.clear(); mjByChar.clear();
       shrinkChars.clear();
       const mask = srcMask();
       mjmap.cand.forEach(([mi, ji, bits]) => {
         const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
-        if (!on) return;
-        push(candByMj, mi, [ji, tierOf(on), !!(on & BIT_KYUUJITAI)]);
+        const self = repOf.get(mi) === ji;
+        if (!on && !self) return;
+        push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI)]);
         push(mjByChar, jisCh[ji], mi);
-        // 絞り込みの「縮退があるものだけ」で使う。根拠を外せばここも痩せる
-        shrinkChars.add(jisCh[ji]);
-        if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
+        // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
+        if (on) {
+          shrinkChars.add(jisCh[ji]);
+          if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
+        }
       });
     }
 
