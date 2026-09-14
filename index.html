@@ -47,8 +47,8 @@
     .level-separator.lvl5 span::before, .level-separator.lvl5 span::after { background-color: #7f8c8d; }
     /* JIS水準の並びとは別物なので、見出しを一段強く離す */
     .level-separator.lvl5 { margin-top: 60px; border-top: 3px double #bdc3c7; padding-top: 22px; }
-    /* 記号は一覧の先頭に置くので、外字のような強い区切りは要らない */
-    .level-separator.lvl5.sym { margin-top: 0; border-top: none; padding-top: 0; }
+    /* 記号や外字の2区分目以降は、前の区分に続くので強い区切りを外す */
+    .level-separator.lvl5.flat { margin-top: 0; border-top: none; padding-top: 0; }
 
     /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
        カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
@@ -117,6 +117,24 @@
     /* データを読めているかどうかは丸の色で示す。どこから読んだかは title に回す */
     .file-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #dfe4e6; margin-right: 6px; vertical-align: 1px; }
     .file-btn.ready .dot { background: #27ae60; }
+
+    /* appearance: base-select にすると候補リストが ::picker(select) として CSS の対象になり、
+       max-height で行数を抑えられる（OS描画のままだと高さは指定できない）。
+       対応していないブラウザはこの宣言を捨ててネイティブ描画に落ちるだけで、動作は変わらない。
+       キー操作・タイプアヘッド・支援技術は <select> のものをそのまま使う。 */
+    select.sel, select.sel::picker(select) { appearance: base-select; }
+    select.sel { padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer;
+                 font-family: inherit; font-size: 0.78rem; font-weight: bold; color: #2c3e50; }
+    select.sel:hover, select.sel:open { border-color: #3498db; }
+    select.sel::picker(select) { max-height: 16em; overflow-y: auto; margin-top: 3px; padding: 4px;
+                                 border: 1px solid #d5dbdb; border-radius: 6px; background: #fff;
+                                 box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+    select.sel optgroup { padding: 6px 8px 2px; font-size: 0.68rem; font-weight: bold; color: #95a5a6; letter-spacing: 1px; }
+    select.sel option { padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: normal; color: #2c3e50; }
+    select.sel option:hover { background: #ebf5fb; }
+    select.sel option:checked { background: #3498db; color: #fff; font-weight: bold; }
+    select.sel option::checkmark { display: none; }
+
     .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
     .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
@@ -209,6 +227,8 @@
       <div class="find-row">
         <span class="bar-label">絞り込み</span>
         <div class="row-body">
+          <label class="switch"><input type="checkbox" id="onlyJinmei"> 人名用漢字だけ (864字)</label>
+          <select id="kuFilter" class="sel"></select>
         </div>
       </div>
       <div class="find-row" id="searchRow">
@@ -603,6 +623,12 @@
     ];
     const SYMBOL_CHARS = new Set(KANJI_SYMBOLS.map(([ch]) => ch));
 
+    // 人名用漢字（戸籍法施行規則別表第二・864字／docs/jinmeiyou-kanji.md）。
+    // 全字がJIS X 0213の第1〜3水準に入っているので水準の区分はそのまま使い、
+    // 部首や検索と同じ絞り込みとして「人名用漢字だけ」を切り出せるようにする。
+    const JINMEIYOU = "丑丞乃之乎乘也云亘亙些亞亥亦亨亮仔伊伍伶伽佃佑佛侃來侑俄俐俠俣俱倖倦倭偲傭傳僞價儉儲允兎兒兜其冨冴凉凌凛凜凧凪凰凱函剩劉劍劫勁勒勳勺勿匁匡卜卯卷卽卿厨厩叉叡叢只叶吞吻吾哉哨哩啄喋喧喬單喰嘉嘗嘩噂噌嚴圃圈國圓團圭坐坦埜埴堯堰堵堺塙增壕壘壞壬壯壽夷奄奎套奧奬姥姪娃娩嬉孃孜孟宋宏宕宥寅寓寢實寬寵將專尖尤尭屑峨峯峻峽崚嵩嵯嶋嶺巌巖巢巫已巳巴巷巽帖帶幌幡庄庇庚庵廟廣廳廻廿弘弛彈彌彗彦彪彬從徠徵德徽忽怜恆恕恢恰悉悌惇惚惟惠惡惣惹惺愼慧憐應懷戊或戟戰戲托拂拔拜按挺挽捧捲捷捺掠掬揃揭搖搜摑摺撒撞撫播撰擊擢攝收敍敦斐斡斧斯於旭昂昊昌昏昴晃晄晋晏晒晚晝晟晦晨智暉暢曆曉曙曝曳曾朋朔李杏杖杜杭杵杷枇柊柏柑柘柚柴柾栖栗栞桂桐桔桧桶梁梓梛條梢梧梯梶棲椀椋椛椰椿楊楓楕楚楠楢楯榊榎榛榮槇槌槍槙槻樂樋樟樣樫樺樽橘橙橫檀檎檜檢櫂櫓櫛櫻欣欽歎此步歷殆毅每毘毬氣汀汐汝汲沌沓沫洛洲洵洸浩浬涉淀淋淚淨淳淵渚渥渴渾湊湘湛溜溢溫滉滯漕漣漱澁澪濕濡瀕瀧瀨灘灸灼烏焚焰煉煌煤熙燈燎燒燕燦燭燿爭爲爾牒牟牡牽犀狀狹狼猪獅獸玖玲珀珂珈珊琉琢琥琳琵琶瑚瑛瑞瑳瑶瓜瓢甥甫畠畢疊疋疏瘦皐皓盃盜盡眞眸瞥矩砥砦砧硯碎碓碗碧碩磐磯祁祇祐祕祢祷祿禄禎禪禮禰禱禽禾秤秦稀稔稜稟稻穗穣穰穹穿窄窪窺竣竪竺竿笈笙笠笹筈筑箔箕篇篠簞簾籾粟粥粹糊紐紗紘紬絃絆絢綜綠綴綸綺綾緋緖緣縞縣縱繡繫纂纏纖羚翔翠耀而耶耽聡聽肇肋肴胡胤脩脹腔膏臟臥與舜舵芙芥芦芭芹苑苔苺茄茅茉茜茸荻莉莊莞莫菅菖菩菫菱萄萊萌萠萩萬萱葡董葦葵葺蒐蒔蒙蒲蒼蓉蓑蓬蓮蔓蔣蔦蔭蕃蕉蕎蕗蕨蕪蕾薗薙薩薰藁藏藝藥蘇蘭虛蝦蝶螺蟬蟹蠟衞衿袈袴裝裟裡裳襖覽訊訣註詢詫誼諄諏諒諺謂謠讃讓豹貰賑賣賴赳跨蹄蹟輔輯輿轉轟辰辻辿迂迄迦迪逗這逞逢遁遙遥遼邑郁郞鄭酉醇醉醍醐醬釀釉釘釧銑鋒鋸錄錆錐錘錫鍊鍬鎧鎭鑄閃閏閤阿陀陷隈險隼雀雁雛雜雫霞靖靜鞄鞍鞘鞠鞭頁頌頗顚顯颯飜饗馨馳馴駈駕駿騷驍驗髮魁魯鮎鯉鯛鰯鱒鱗鳩鳳鳶鴨鴻鵜鵬鷄鷗鷲鷹鷺麒麟麿黃黎黑默黛鼎齊龍欄廊朗虜類猪神祥福諸都侮僧勉勤卑嘆器墨層悔憎懲敏暑梅海渚漢煮琢碑社祉祈祐祖祝禍禎穀突節練繁署者臭著視謁謹賓贈逸難響";
+    const JINMEI_CHARS = new Set(Array.from(JINMEIYOU));
+
     // かなの繰り返し記号（踊り字）。変体仮名と同じ用途で使うので同じ画面に置く。
     // くの字点は上半分と下半分の2文字を並べて1つの記号になる（縦書き用）。
     const KANA_REPEATS = [
@@ -723,6 +749,10 @@
       const checked = document.querySelector('input[name="radical"]:checked');
       if (checked) checked.checked = false;
       lastRadical = null;
+      el('onlyJinmei').checked = false;
+      el('kuFilter').value = '';
+      el('mjSearch').value = '';
+      el('mjmapStatus').textContent = '';
       renderKanji();
     }
 
@@ -737,21 +767,25 @@
         const [part, rad] = checked.value.split('::');
         targetChars = new Set(KANJI_RADICALS[part][rad]);
       }
+      // 人名用漢字は第1〜3水準に散っているので、部首と同じ絞り込みとして重ねる
+      if (el('onlyJinmei').checked) {
+        targetChars = targetChars ? new Set([...targetChars].filter(c => JINMEI_CHARS.has(c))) : new Set(JINMEI_CHARS);
+      }
 
-      // 検索欄も絞り込みとして効かせる。面区点の前方一致は面・区で、それ以外は1字に解決して絞る
+      // 区の絞り込みは「面区」か「外字のブロック」のどちらか。検索欄は字の絞り込みとして別に効かせる
+      const kuOk = kuMatcher();
+      const blk = blockValue();
       const q = document.getElementById('mjSearch').value.trim();
-      const kuOk = q ? kuMatcher(q) : null;
-      if (q && !kuOk) {
-        const ch = resolveQuery(q);
-        const only = new Set(ch ? [ch] : []);
+      if (q) {
+        const only = resolveQuery(q);
         targetChars = targetChars ? new Set([...targetChars].filter(c => only.has(c))) : only;
       }
 
       let total = 0;
       // 記号は水準の並びの外なので先頭に置く。第4水準と外字の間だと 44,349枚 に埋もれる
-      if (!kuOk) total += renderSymbols(container, targetChars);
+      if (!kuOk && !blk) total += renderSymbols(container, targetChars);
 
-      [1, 2, 3, 4].forEach(level => {
+      if (!blk) [1, 2, 3, 4].forEach(level => {
         const chars = allKanjiList[level];
         const kus = kuByLevel[level];
         const items = []; // [{char, ku}] フィルタを適用した並び（区点の昇順を維持）
@@ -782,7 +816,7 @@
       });
 
       // 外字は面区点を持たないので、面区点で絞っているときは出さない
-      if (!kuOk) total += renderGaiji(container, targetChars);
+      if (!kuOk) total += renderGaiji(container, targetChars, blk);
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
       buildSectionJump(container);
@@ -1029,11 +1063,11 @@
       buildEdges();
 
       setDataState(true, `読込済み（${DATA_SOURCE[source] || "不明"}）／クリックで別のファイルを読む`);
-      el("mjmapStatus").textContent =
-        `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
+      el("mjmapStatus").textContent = "";
       el("showTree").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
+      fillGaijiBlocks();
       if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
@@ -1053,7 +1087,7 @@
     [["tierLaw", "law"], ["tierKyuu", "kyuu"]].forEach(([id, key]) =>
       el(id).addEventListener("change", e => {
         showKyuu[key] = e.target.checked;
-        if (mjmap) { buildEdges(); renderKanji(); }
+        if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
       }));
 
     el("mjmapInput").addEventListener("change", e => {
@@ -1093,7 +1127,7 @@
       if (!items.length) return 0;
 
       const sep = document.createElement("div");
-      sep.className = "level-separator lvl5 sym";
+      sep.className = "level-separator lvl5 flat";
       sep.innerHTML = "<span>記号</span>";
       container.appendChild(sep);
       const grid = document.createElement("div");
@@ -1117,7 +1151,7 @@
        縮退先が1つも定義されていないMJ字形。ツリーに出すと2万3千行かさばるだけなので、
        一覧側で灰色の1セクションとして眺められるようにする。
        （縮退先を持つJIS外のMJ字形はツリーのMJ列に出るので、ここには入らない） */
-    function renderGaiji(container, targetChars) {
+    function renderGaiji(container, targetChars, blk) {
       if (!mjmap) return 0;
       const items = [];
       mjmap.mj.forEach((m, i) => {
@@ -1126,16 +1160,19 @@
         // charLevel は第1〜4水準だけを持つ（外字は入れない）ので、この has() は水準字かどうかを見る
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
-        const ch = cp(m[1]) + (m[2] ? cp(m[2]) : "");
+        const base = cp(m[1]);
+        const ch = base + (m[2] ? cp(m[2]) : "");
         if (SYMBOL_CHARS.has(ch)) return; // 記号セクションに出しているので重ねない
         if (targetChars !== null && !targetChars.has(ch)) return;
-        items.push({ char: ch, mj: mjName(m[0]), code: parseInt(m[1], 16) });
+        const code = parseInt(m[1], 16);
+        if (blk && cjkBlock(code) !== blk) return;
+        items.push({ char: ch, base, mj: mjName(m[0]), code });
       });
       if (!items.length) return 0;
       items.sort((a, b) => a.code - b.code || a.mj.localeCompare(b.mj));
 
-      // ブロックは 拡張A/統合/互換/拡張B〜F にまたがるが、見出しを分けるとかさばるので
-      // 1項目にまとめ、どのブロックの字かは各カードの tooltip に出す
+      // 外字は面区点を持たないので、水準側の「区」の札にあたるものがUnicodeブロックになる。
+      // 区分を分けずに1本のグリッドのまま、ブロックが変わった最初のカードだけ札を出す。
       const sep = document.createElement("div");
       sep.className = "level-separator lvl5";
       sep.innerHTML = "<span>MJ外字</span>";
@@ -1144,13 +1181,16 @@
       grid.className = "grid";
       container.appendChild(grid);
 
+      let prevBlock = null;
       items.forEach(it => {
+        const blockName = cjkBlock(it.code);
+        const label = blockName !== prevBlock ? `<span class="ku-tag">${blockName}</span>` : "";
+        prevBlock = blockName;
         const card = document.createElement("div");
         card.className = "card lvl5";
-        card.innerHTML = `<span class="char-main">${it.char}</span>`;
-        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${cjkBlock(it.code)}`;
+        card.innerHTML = `${label}<span class="char-main">${it.char}</span>`;
+        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${blockName}`;
         card.dataset.char = it.char;
-        card.dataset.i = listOrder.length;
         card.onclick = () => copyText(it.char, `「${it.char}」`);
         grid.appendChild(card);
         listOrder.push({ char: it.char, level: 5, mj: it.mj });
@@ -1573,48 +1613,110 @@
       return true;
     }
 
-    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 の4通りを受ける ---- */
+    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 を受け、当たった字の集合を返す ----
+       MJ番号と符号位置は前方一致でも拾う。MJ0068 なら MJ006800〜MJ006899 が、
+       U+4F1 なら U+4F10〜U+4F1F がまとめて当たる。桁を全部打てば従来どおり1字になる。
+       MJ字形はIVS付きの札でも一覧に出ているので、基底とIVS付きの両方を集合に入れる。 */
     function resolveQuery(q) {
       q = q.trim();
-      if (!q) return null;
+      const out = new Set();
+      if (!q) return out;
       let m;
-      if (m = /^MJ(\d{6})$/i.exec(q)) { const i = mjIndex.get("MJ" + m[1]); return i == null ? null : cp(mjmap.mj[i][1]); }
-      if (m = /^U\+?([0-9a-f]{4,6})$/i.exec(q)) return String.fromCodePoint(parseInt(m[1], 16));
-      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
-        const k = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-        return jisChar.get(k) || null;
+      if (m = /^MJ(\d{1,6})$/i.exec(q)) {
+        // 桁を揃えて打っても（MJ0068）、頭の0を省いて打っても（MJ89）前方一致で拾う
+        const dig = m[1];
+        if (mjmap) mjmap.mj.forEach(x => {
+          const n = String(x[0]);
+          if (!x[1] || !(n.padStart(6, "0").startsWith(dig) || n.startsWith(dig))) return;
+          out.add(cp(x[1]));
+          if (x[2]) out.add(cp(x[1]) + cp(x[2]));
+        });
+        return out;
       }
-      return Array.from(q)[0];
+      if (m = /^U\+?([0-9a-f]{1,6})$/i.exec(q)) {
+        const pre = m[1].toUpperCase();
+        const hex = c => c.codePointAt(0).toString(16).toUpperCase();
+        [1, 2, 3, 4].forEach(lv => allKanjiList[lv].forEach(c => { if (hex(c).startsWith(pre)) out.add(c); }));
+        if (mjmap) mjmap.mj.forEach(x => {
+          if (!x[1] || !x[1].toUpperCase().replace(/^0+/, "").startsWith(pre.replace(/^0+/, ""))) return;
+          out.add(cp(x[1]));
+          if (x[2]) out.add(cp(x[1]) + cp(x[2]));
+        });
+        return out;
+      }
+      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
+        const ch = jisChar.get(`${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`);
+        if (ch) out.add(ch);
+        return out;
+      }
+      Array.from(q).forEach(c => out.add(c));
+      return out;
     }
 
-    // 面区点の前方一致。"1" なら1面ぜんぶ、"1-18" なら1面18区ぜんぶ。
-    // 点まで書かれた "1-18-81" は resolveQuery が1字に解決するのでここでは受けない。
-    // 面は水準から決まる（第1〜3水準=面1、第4水準=面2）ので mjmap を読んでいなくても効く。
-    function kuMatcher(q) {
-      const m = /^([12])(?:-(\d{1,2}))?$/.exec(q);
-      if (!m) return null;
-      const men = +m[1], ku = m[2] == null ? null : +m[2];
-      return (level, cardKu) => (level === 4 ? 2 : 1) === men && (ku === null || cardKu === ku);
+    /* 区の絞り込み。面区（1-16 など）と MJ外字のブロック（CJK拡張A など）を1つの箱に入れ、
+       どの水準の区なのかは optgroup で束ねる。面は水準から決まる（第1〜3水準=1面、第4水準=2面）
+       ので、面区のほうは mjmap を読んでいなくても効く。 */
+    const kuValue = () => el("kuFilter").value;
+    const blockValue = () => kuValue().startsWith("blk:") ? kuValue().slice(4) : null;
+    function kuMatcher() {
+      const v = kuValue();
+      if (!v || blockValue()) return null;
+      const men = +v.slice(0, 1), ku = +v.slice(2);
+      return (level, cardKu) => (level === 4 ? 2 : 1) === men && cardKu === ku;
+    }
+    function buildKuFilter() {
+      const sel = el("kuFilter");
+      sel.innerHTML = '<option value="">区: すべて</option>';
+      [1, 2, 3, 4].forEach(lv => {
+        const men = lv === 4 ? 2 : 1;
+        const ks = [...new Set(kuByLevel[lv].map(ku => `${men}-${String(ku).padStart(2, "0")}`))].sort();
+        if (!ks.length) return;
+        const g = document.createElement("optgroup");
+        g.label = `第${lv}水準`;
+        ks.forEach(k => g.appendChild(new Option(k, k)));
+        sel.appendChild(g);
+      });
+      sel.addEventListener("change", runSearch);
+    }
+
+    /* 外字のブロックは mjmap を読まないと分からないので、読み込んだあとで足す。
+       縮退の根拠を切ると外字に回る字が変わるので、そのたびに引き直す。 */
+    function fillGaijiBlocks() {
+      const sel = el("kuFilter");
+      const keep = sel.value;
+      const old = sel.querySelector('optgroup[label="MJ外字"]');
+      if (old) old.remove();
+      const seen = new Set();
+      mjmap.mj.forEach((m, i) => {
+        if (!m[1]) return;
+        const to = candByMj.get(i);
+        if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
+        if (SYMBOL_CHARS.has(cp(m[1]) + (m[2] ? cp(m[2]) : ""))) return; // 記号は外字に出さない
+        seen.add(cjkBlock(parseInt(m[1], 16)));
+      });
+      const g = document.createElement("optgroup");
+      g.label = "MJ外字";
+      CJK_BLOCKS.map(b => b[2]).concat("その他").forEach(name => {
+        if (seen.has(name)) g.appendChild(new Option(name, "blk:" + name));
+      });
+      sel.appendChild(g);
+      sel.value = keep;
+      if (!sel.value) sel.value = ""; // 消えたブロックを選んでいたら「すべて」に戻す
     }
 
     function runSearch() {
       const q = el("mjSearch").value.trim();
       renderKanji(); // 検索も絞り込みなので一覧ごと組み直す（末尾で rebuildTree される）
       const st = el("mjmapStatus");
-      if (!q) {
-        st.textContent = mjmap
-          ? `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`
-          : "mjmap.json を選択してください";
-        return;
-      }
-      if (kuMatcher(q)) { st.textContent = `${q} に ${listOrder.length.toLocaleString()}字`; return; }
-      const ch = resolveQuery(q);
-      if (!ch) { st.textContent = "見つかりませんでした"; return; }
+      if (!q) { st.textContent = ""; return; }
+      if (!listOrder.length) { st.textContent = "一覧に該当なし"; return; }
+      // 一覧が1枚に絞れたときだけ縮退の中身まで出す。前方一致で広く当たったときは件数だけ
+      if (listOrder.length !== 1) { st.textContent = `${listOrder.length.toLocaleString()}字が該当`; return; }
+      const ch = Array.from(listOrder[0].char)[0]; // 外字のカードはIVS付きなので基底を見る
       const mjs = mjByChar.get(ch) || [];
       const outOf = new Set();
       mjs.forEach(i => (candByMj.get(i) || []).forEach(([ji]) => { if (jisCh[ji] !== ch) outOf.add(mjmap.jis[ji][0]); }));
       st.textContent = `「${ch}」 縮退元 ${mjs.length}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
-      if (!listOrder.some(it => it.char === ch)) st.textContent += " ※一覧に無い字";
     }
 
     // 入力のたびに絞る。一覧の組み直しは重いので少し待つ（IME変換中は確定まで待つ）
@@ -1622,6 +1724,8 @@
     const scheduleSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 250); };
     ["input", "compositionend"].forEach(ev =>
       el("mjSearch").addEventListener(ev, e => { if (!e.isComposing) scheduleSearch(); }));
+    el("onlyJinmei").addEventListener("change", runSearch);
+
     el("mjSearch").addEventListener("keydown", e => {
       if (e.key === "Enter") { clearTimeout(searchTimer); runSearch(); }
     });
@@ -1639,6 +1743,7 @@
     // 初期化実行
     window.onload = () => {
       initData();
+      buildKuFilter(); // 面区の選択肢は initData が並べた区データから作る
       buildRadicalListboxes();
       renderKanji();
       renderHentaigana();
