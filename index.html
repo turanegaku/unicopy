@@ -115,6 +115,18 @@
     .legend b { color: #7f8c8d; }
     .legend b.kj { color: #e67e22; }
     .legend .credit { color: #bdc3c7; }
+    /* 根拠は6つ並ぶので、チェック箱のぶんの幅を切ってトグルチップにする。
+       input は消さずに透明で置いておく（キーボードで辿れて :has(:checked) も効く）。
+       同じ出典から来る根拠は「戸籍」の箱にまとめ、頭の「戸籍」を3回書かずに済ませる。 */
+    .src-group { display: inline-flex; align-items: center; gap: 4px; padding: 2px 5px; border: 1px solid #e4e4e4; border-radius: 6px; }
+    .src-chip { position: relative; padding: 4px 9px; border: 1px solid #ccc; border-radius: 5px; background: #fff;
+                cursor: pointer; user-select: none; font-size: 0.75rem; font-weight: bold; color: #7f8c8d; }
+    .src-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .src-chip:hover { background: #ebf5fb; }
+    .src-chip:has(input:checked) { background: #3498db; border-color: #3498db; color: #fff; }
+    .src-chip:has(input:focus-visible) { outline: 2px solid #2980b9; outline-offset: 1px; }
+    #srcSwitches { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
     .font-status-btn { padding: 5px 10px; border-radius: 5px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
     /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
     .file-btn { padding: 5px 12px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer; font-size: 0.78rem; font-weight: bold; color: #7f8c8d; }
@@ -221,7 +233,7 @@
         <span class="bar-label">縮退の根拠</span>
         <span id="srcSwitches"></span>
       </div>
-      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示　<b>点線</b>=辞書・類推<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
+      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
     </div>
     <div class="search-container" id="radicalListboxes">
       <div class="find-row jump-row">
@@ -1021,12 +1033,13 @@
     const SRC = [
       { id: "srcJis",    label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
       { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（466本）" },
-      { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
-      { id: "srcGoji",   label: "誤字俗字",   tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
-      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
+      { id: "srcGoji",   label: "誤字俗字",   tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
+      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
       { id: "src582",    label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等に係る漢字氏名の表記（12,568本）" },
-      { id: "srcDict",   label: "辞書",       tier: 2, on: false, title: "辞書類等による関連字（15,958本）" },
-      { id: "srcGuess",  label: "読み・字形", tier: 2, on: false, title: "読み・字形による類推（413本）" },
+      // 辞書・類推は縮退の根拠としては弱すぎて常用しないので、データには持つがチップは出さない
+      { id: "srcDict",   label: "辞書",       tier: 2, on: false, hidden: true, title: "辞書類等による関連字（15,958本）" },
+      { id: "srcGuess",  label: "読み・字形", tier: 2, on: false, hidden: true, title: "読み・字形による類推（413本）" },
     ];
     SRC.forEach((s, i) => s.bit = 1 << i);
     const BIT_KYUUJITAI = SRC.find(s => s.kj).bit;
@@ -1132,9 +1145,17 @@
       });
     }
 
-    el("srcSwitches").innerHTML = SRC.map(s =>
-      `<label class="switch" title="${s.title}"><input type="checkbox" id="${s.id}"${s.on ? " checked" : ""}> ${s.label}</label>`).join("");
-    SRC.forEach(s => el(s.id).addEventListener("change", e => {
+    // 続きのグループは1つの箱にまとめて、頭に出典名を1回だけ書く
+    el("srcSwitches").innerHTML = SRC.reduce((h, s, i) => {
+      if (s.hidden) return h;
+      const prev = SRC[i - 1];
+      if (s.group !== (prev && !prev.hidden ? prev.group : undefined)) {
+        if (prev && prev.group) h += "</span>";
+        if (s.group) h += `<span class="src-group"><span class="bar-label">${s.group}</span>`;
+      }
+      return h + `<label class="src-chip" title="${s.title}"><input type="checkbox" id="${s.id}"${s.on ? " checked" : ""}>${s.label}</label>`;
+    }, "") + (SRC.filter(s => !s.hidden).pop().group ? "</span>" : "");
+    SRC.filter(s => !s.hidden).forEach(s => el(s.id).addEventListener("change", e => {
       s.on = e.target.checked;
       if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
     }));
