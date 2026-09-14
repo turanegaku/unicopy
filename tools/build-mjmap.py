@@ -129,8 +129,9 @@ def build(xlsx_path, shrink_path, kyuujitai):
             index_of[name] = len(mj)
             if r.get('x0213'):
                 own[name] = r['x0213']
-                # 包摂区分0 = その面区点のJIS例示字形。同じ面区点に縮退するMJを並べるとき、
-                # 字形がその面区点そのものであるMJを先頭に出すために持っておく。
+                # 包摂区分0 = 包摂規準を当てずにその面区点に対応している字形。
+                # 同じ面区点に縮退するMJを並べるとき先頭に出すために持っておく。
+                # 1つの面区点に複数あることがある（10,909件／10,054面区点）。
                 if r.get('houhsetsu') == '0':
                     rep_of[name] = r['x0213']
             mj.append([int(name[2:]), ucs[2:] if ucs else '',

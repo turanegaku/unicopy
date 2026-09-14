@@ -244,6 +244,7 @@
         <span class="bar-label">絞り込み</span>
         <div class="row-body">
           <label class="switch"><input type="checkbox" id="onlyJinmei"> 人名用漢字だけ (864字)</label>
+          <label class="switch" title="いま選んでいる根拠で縮退が1本でも定義されている字だけを出す。縮退元・縮退先のどちらでも当たる。包摂・統合を外せば、包摂だけで繋がっている字も消える"><input type="checkbox" id="onlyShrink"> 縮退があるものだけ</label>
           <select id="kuFilter" class="sel"></select>
         </div>
       </div>
@@ -634,8 +635,11 @@
 
     // JIS漢字の一覧に入らない記号。Ideographic ではないので水準の生成から漏れるが、
     // 漢字に添えて使うのでコピーできるようにしておく。面区点は mjmap から引けるものだけ出す。
+    // 仝 は1面1区24点。漢字の区(16〜94)の外なので水準の一覧に入らず、
+    // 面区点を持つ10,054字のうち唯一どのセクションにも出ていなかった。
     const KANJI_SYMBOLS = [
       ["々", "同の字点"], ["〻", "二の字点"], ["〆", "しめ"], ["〇", "漢数字のゼロ"], ["ヶ", "箇"],
+      ["仝", "「同」の異体字（同上）"],
     ];
     const SYMBOL_CHARS = new Set(KANJI_SYMBOLS.map(([ch]) => ch));
 
@@ -771,6 +775,7 @@
       if (checked) checked.checked = false;
       lastRadical = null;
       el('onlyJinmei').checked = false;
+      el('onlyShrink').checked = false;
       el('kuFilter').value = '';
       el('mjSearch').value = '';
       el('mjmapStatus').textContent = '';
@@ -791,6 +796,10 @@
       // 人名用漢字は第1〜3水準に散っているので、部首と同じ絞り込みとして重ねる
       if (el('onlyJinmei').checked) {
         targetChars = targetChars ? new Set([...targetChars].filter(c => JINMEI_CHARS.has(c))) : new Set(JINMEI_CHARS);
+      }
+      // いま選んでいる根拠で縮退が1本も無い字を落とす。根拠を絞るほどここも絞れる
+      if (el('onlyShrink').checked) {
+        targetChars = targetChars ? new Set([...targetChars].filter(c => shrinkChars.has(c))) : new Set(shrinkChars);
       }
 
       // 区の絞り込みは「面区」か「外字のブロック」のどちらか。検索欄は字の絞り込みとして別に効かせる
@@ -1007,6 +1016,7 @@
     let useIPAmj = false;       // 字形の描画にIPAmj明朝を使うか（バッジで切り替える）
     const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
     const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
+    const shrinkChars = new Set();// いま選んでいる根拠で縮退に関わる字（縮退元の字形／縮退先の両方）
     const candByMj = new Map();   // MJ index -> [面区点の添字]
     const mjIndex = new Map();    // "MJ000089" -> index
     const jisChar = new Map();    // "1-18-81" -> "会"
@@ -1133,15 +1143,35 @@
       if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
-    // 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る
+    /* 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る。
+       ただし、包摂規準を当てずにその面区点に対応している字形（X0213 包摂区分0＝
+       mjmap.json の rep）へのエッジは根拠の選択に関わらず残す。縮退マップはこれを包摂規準のエッジとして
+       持っている（MJ自身の面区点は別枠では持っていない）が、中身は縮退ではなく
+       「この字形がこの面区点の字である」という1:1の対応なので、包摂を外したからと
+       いって消してよいものではない。消すと 亜(1-16-01) の字形 MJ006454 や
+       亞(1-48-19) が丸ごと落ちて、亞→亜 の新旧字体だけが宙に浮いた1行になる。
+
+       残すのはこの区分0のエッジだけ。基底の符号位置が同じでも包摂規準が当たっているMJ
+       （医+E0102=MJ007821 は規準U118で1-16-69へ、醫+E0102=MJ026548 も同じくU118）は
+       字形が違うので、その面区点との関係は1:1ではなく包摂である。
+       区分0は1つの面区点に複数あることがあり（10,909本／10,054面区点、785面区点が2つ以上）、
+       愛(1-16-06) は MJ011751(E0102) と MJ011752(E0101) の両方が区分0になっている。
+       全ての区分0エッジが包摂規準として入っていることは確かめてある。 */
     function buildEdges() {
       candByMj.clear(); mjByChar.clear();
+      shrinkChars.clear();
       const mask = srcMask();
       mjmap.cand.forEach(([mi, ji, bits]) => {
         const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
-        if (!on) return;
-        push(candByMj, mi, [ji, tierOf(on), !!(on & BIT_KYUUJITAI)]);
+        const self = repOf.get(mi) === ji;
+        if (!on && !self) return;
+        push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI)]);
         push(mjByChar, jisCh[ji], mi);
+        // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
+        if (on) {
+          shrinkChars.add(jisCh[ji]);
+          if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
+        }
       });
     }
 
@@ -1300,7 +1330,11 @@
           (candByMj.get(m) || []).forEach(([ji, ti, kj]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
-            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], col: (charLevel.get(ch) || 5) - 1, idx: byCh.size });
+            // 記号は1面1区・5区で第1〜4水準の外に居る。列が無いままだと 5列目＝MJ列へ
+            // 落ちてMJの字形と重なるので、終着点側＝第1水準の列に寄せる。
+            // 面区点は札に出るので 1-01-24 が第1水準でないことは読み取れる。
+            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], idx: byCh.size,
+                                       col: SYMBOL_CHARS.has(ch) ? 0 : (charLevel.get(ch) || 5) - 1 });
             b |= 1 << t.idx;
             if (ti > worst) worst = ti;          // 行の線はその行がぶら下がる一番弱い根拠に合わせる
             tierOfEdge.set(m + ":" + t.idx, ti);
@@ -1335,14 +1369,39 @@
           branches.push({ bits: setOf.get(m), first: k, last: k });
         });
 
+        // 親は自分を含む直近の枝。縮退先の少ない順に並べてあるので親は必ず自分より前に居る。
+        // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる。
+        const parentOf = branches.map((br, bi) => {
+          for (let j = bi - 1; j >= 0; j--) {
+            if ((branches[j].bits & br.bits) === branches[j].bits) return j;
+          }
+          return bi > 0 ? 0 : -1;
+        });
+
+        /* 枝を「親のすぐ後ろに子」の順へ並べ替える。
+           縮退先の数の順に並べただけだと親と子のあいだに無関係な枝が挟まり、
+           増える字の無い枝が1つ上の枝にぶら下がっているように見える。
+           国の群なら 囶(MJ008844) と 圀(MJ008853) のあいだに MJ008843 が落ちて、
+           MJ008843 が 1-51-91 へ縮退しているかのように読めていた。 */
+        const kids = branches.map(() => []);
+        const order = [];
+        parentOf.forEach((pi, bi) => { if (pi >= 0) kids[pi].push(bi); else order.push(bi); });
+        for (let n = 0; n < order.length; n++) order.splice(n + 1, 0, ...kids[order[n]]);
+        const at = new Map(order.map((bi, i) => [bi, i]));
+        const reordered = order.map(bi => {
+          const br = branches[bi];
+          const first = mjs.length;                       // 並べ替えたMJは末尾へ積んでいく
+          for (let k = br.first; k <= br.last; k++) mjs.push(mjs[k]);
+          return { bits: br.bits, first, last: mjs.length - 1, parent: at.has(parentOf[bi]) ? at.get(parentOf[bi]) : -1 };
+        });
+        const cut = reordered[0].first;                   // 元の並びを捨てて添字を詰め直す
+        mjs.splice(0, cut);
+        reordered.forEach(br => { br.first -= cut; br.last -= cut; });
+        branches.length = 0;
+        branches.push(...reordered);
+
         const drawn = new Set();
         branches.forEach((br, bi) => {
-          br.parent = -1;
-          for (let j = bi - 1; j >= 0; j--) {
-            if ((branches[j].bits & br.bits) === branches[j].bits) { br.parent = j; break; }
-          }
-          // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる
-          if (br.parent < 0 && bi > 0) br.parent = 0;
           // 親から増えたぶん。ただし既に他の枝が描いた字は二度描かない
           // （包含関係が無い枝どうしだと、親を枝0に寄せた結果ぶつかることがある）
           const base = bi === 0 ? 0 : branches[br.parent].bits;
@@ -1800,7 +1859,7 @@
     const scheduleSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 250); };
     ["input", "compositionend"].forEach(ev =>
       el("mjSearch").addEventListener(ev, e => { if (!e.isComposing) scheduleSearch(); }));
-    el("onlyJinmei").addEventListener("change", runSearch);
+    ["onlyJinmei", "onlyShrink"].forEach(id => el(id).addEventListener("change", runSearch));
 
     el("mjSearch").addEventListener("keydown", e => {
       if (e.key === "Enter") { clearTimeout(searchTimer); runSearch(); }
