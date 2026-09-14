@@ -102,6 +102,12 @@
     .legend b.kj { color: #e67e22; }
     .legend .credit { color: #bdc3c7; }
     .font-status-btn { padding: 5px 10px; border-radius: 5px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
+    .file-btn { padding: 5px 12px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer; font-size: 0.78rem; font-weight: bold; color: #7f8c8d; }
+    .file-btn:hover { background: #ebf5fb; border-color: #3498db; color: #2980b9; }
+    /* データを読めているかどうかは丸の色で示す。どこから読んだかは title に回す */
+    .file-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #dfe4e6; margin-right: 6px; vertical-align: 1px; }
+    .file-btn.ready .dot { background: #27ae60; }
     .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
     .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
@@ -171,7 +177,7 @@
     <div class="tree-bar">
       <div class="bar-group">
         <span class="bar-label">設定</span>
-        <label>データ <input type="file" id="mjmapInput" accept=".json"></label>
+        <label class="file-btn" id="dataBtn" title="縮退データは未読込です"><span class="dot"></span>データ<input type="file" id="mjmapInput" accept=".json" hidden></label>
         <span class="bar-label">表示</span>
         <label class="switch"><input type="checkbox" id="showList" checked> 一覧</label>
         <label class="switch"><input type="checkbox" id="showTree" disabled> 縮退ツリー</label>
@@ -979,7 +985,12 @@
     }
 
     // ---- mjmap.json の取り込み ----
-    function loadMjmap(text) {
+    const DATA_SOURCE = { idb: "保存済みデータ", fetch: "mjmap.json", file: "選択したファイル" };
+    const setDataState = (ready, text) => {
+      el("dataBtn").classList.toggle("ready", ready);
+      el("dataBtn").title = text;
+    };
+    function loadMjmap(text, source) {
       mjmap = JSON.parse(text);
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
@@ -993,6 +1004,7 @@
       });
       buildEdges();
 
+      setDataState(true, `読込済み（${DATA_SOURCE[source] || "不明"}）／クリックで別のファイルを読む`);
       el("mjmapStatus").textContent =
         `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
       el("showTree").disabled = false;
@@ -1023,14 +1035,14 @@
     el("mjmapInput").addEventListener("change", e => {
       const f = e.target.files[0];
       if (!f) return;
-      el("mjmapStatus").textContent = "読み込み中...";
+      setDataState(false, "読み込み中...");
       const r = new FileReader();
       r.onload = ev => {
         try {
-          loadMjmap(ev.target.result);
+          loadMjmap(ev.target.result, "file");
           idb("readwrite", s => s.put(ev.target.result, "mjmap")).catch(() => {});
         } catch (err) {
-          el("mjmapStatus").textContent = "読み込みに失敗: " + err.message;
+          setDataState(false, "読み込みに失敗: " + err.message);
         }
       };
       r.readAsText(f);
@@ -1611,8 +1623,8 @@
       // 前回読ませた mjmap.json が残っていればファイル選択なしで復元する。
       // 無ければ同じ場所に置かれた mjmap.json を取りに行く（file:// では失敗するのでその時は手動選択）
       idb('readonly', s => s.get('mjmap'))
-        .then(t => t || fetch('mjmap.json').then(r => r.ok ? r.text() : null))
-        .then(t => { if (t) loadMjmap(t); })
+        .then(t => t ? { t, src: 'idb' } : fetch('mjmap.json').then(r => r.ok ? r.text() : null).then(t => t && { t, src: 'fetch' }))
+        .then(r => { if (r) loadMjmap(r.t, r.src); })
         .catch(() => {});
     };
   </script>
