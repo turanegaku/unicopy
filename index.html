@@ -807,12 +807,13 @@
         const grid = document.createElement('div');
         grid.className = 'grid';
         let prevKu = null;
-        items.forEach(({ char, ku }) => {
+        const html = items.map(({ char, ku }) => {
           const kuLabel = ku !== prevKu ? `区${ku}` : '';
           prevKu = ku;
-          createKanjiCard(char, level, ku, kuLabel, grid);
+          return kanjiCardHtml(char, level, ku, kuLabel);
         });
         container.appendChild(grid);
+        fillGrid(grid, html);
       });
 
       // 外字は面区点を持たないので、面区点で絞っているときは出さない
@@ -859,19 +860,23 @@
       syncTree();
     }
 
-    function createKanjiCard(char, level, ku, kuLabel, parent) {
-      const card = document.createElement('div');
-      card.className = `card lvl${level}`;
-      card.innerHTML = `${kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : ''}<span class="char-main">${char}</span>`;
-      card.title = `「${char}」 ${charJis.get(char) || `第${level}水準 区${ku}`}`;
-      card.dataset.char = char;
-      card.dataset.i = listOrder.length;
-      card.onclick = () => copyText(char, `漢字「${char}」`);
-      parent.appendChild(card);
+    /* カードは1枚ずつ createElement すると5万枚で効くので、HTMLを組んでグリッド単位で流し込む。
+       クリックは #kanjiContainer の委譲で受けるので、カードごとのハンドラも張らない。 */
+    function cardHtml(cls, char, title, extra) {
+      return `<div class="card ${cls}" title="${title}" data-char="${char}">`
+        + `${extra || ""}<span class="char-main">${char}</span></div>`;
+    }
+    function kanjiCardHtml(char, level, ku, kuLabel) {
       // ツリーの行順・縦スクロール同期の基準として一覧の並びを控えておく
       charLevel.set(char, level);
       listOrder.push({ char, level, ku });
-      cardEls.push(card);
+      const jis = charJis.get(char) || (ku == null ? `第${level}水準` : `第${level}水準 区${ku}`);
+      return cardHtml(`lvl${level}`, char, `「${char}」 ${jis}`, kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : "");
+    }
+    // グリッドに流し込んだあと、DOMノードを一覧の並びと同じ順で控える
+    function fillGrid(grid, html) {
+      grid.innerHTML = html.join("");
+      for (const node of grid.children) cardEls.push(node);
     }
 
     // --- 変体仮名モードのUI制御（あ行/か行…ごとにセパレートし、ひらがな単位で改行して常時全件表示） ---
@@ -970,6 +975,7 @@
     const repOf = new Map();      // MJ index -> その面区点のJIS例示字形になっている面区点のindex
     const charJis = new Map();    // "会" -> "1-18-81"
     let jisCh = [];               // 面区点の添字 -> 文字
+    let mjBase = [];              // MJ index -> 基底の1文字。ツリーの並べ替えで何度も引くので先に作っておく
 
     // 一覧の描画順。ツリーの行順と縦スクロール同期の基準になる
     let listOrder = [], cardEls = [];
@@ -1056,6 +1062,7 @@
       repOf.clear();
       (mjmap.rep || []).forEach(([mi, ji]) => repOf.set(mi, ji));
       jisCh = mjmap.jis.map(j => cp(j[1]));
+      mjBase = mjmap.mj.map(m => cp(m[1]));
       mjmap.jis.forEach((j, k) => {
         jisChar.set(j[0], jisCh[k]);
         if (!charJis.has(jisCh[k])) charJis.set(jisCh[k], j[0]);
@@ -1134,16 +1141,11 @@
       grid.className = "grid";
       container.appendChild(grid);
 
-      items.forEach(([ch, name]) => {
-        const card = document.createElement("div");
-        card.className = "card lvl5";
-        card.innerHTML = `<span class="char-main">${ch}</span>`;
+      // 記号はツリーの行を持たない（縮退先ではなく添え字なので）ので listOrder には積まない
+      grid.innerHTML = items.map(([ch, name]) => {
         const jis = charJis.get(ch);
-        card.title = `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`;
-        card.dataset.char = ch;
-        card.onclick = () => copyText(ch, `「${ch}」`);
-        grid.appendChild(card);
-      });
+        return cardHtml("lvl5", ch, `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`);
+      }).join("");
       return items.length;
     }
 
@@ -1182,20 +1184,14 @@
       container.appendChild(grid);
 
       let prevBlock = null;
-      items.forEach(it => {
+      fillGrid(grid, items.map(it => {
         const blockName = cjkBlock(it.code);
         const label = blockName !== prevBlock ? `<span class="ku-tag">${blockName}</span>` : "";
         prevBlock = blockName;
-        const card = document.createElement("div");
-        card.className = "card lvl5";
-        card.innerHTML = `${label}<span class="char-main">${it.char}</span>`;
-        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${blockName}`;
-        card.dataset.char = it.char;
-        card.onclick = () => copyText(it.char, `「${it.char}」`);
-        grid.appendChild(card);
         listOrder.push({ char: it.char, level: 5, mj: it.mj });
-        cardEls.push(card);
-      });
+        return cardHtml("lvl5", it.char,
+          `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${blockName}`, label);
+      }));
       return items.length;
     }
 
@@ -1207,9 +1203,14 @@
        枝は自分を含む直近の枝を親にして、親から増えたぶんの字だけを描く。
        2字以上増える枝は枠で囲み、その中心から左へ出して └ で親に繋ぐ。
        横線はその枝の幹から右にしか伸びないので、交点に点を打たなくても読める。 */
+    let treeDirty = false;
     function rebuildTree() {
       const pane = el("treePane");
       if (!mjmap) { pane.innerHTML = '<div class="tree-empty">縮退データ未読込</div>'; return; }
+      // ツリーを閉じているあいだは組まない。5万4千行ぶんのレイアウト計算が一覧の描き直しに
+      // 毎回乗ると、部首を解除しただけで1秒近く固まる。開いたときにまとめて組む。
+      if (!document.body.classList.contains("tree-on")) { treeDirty = true; return; }
+      treeDirty = false;
 
       treeRows = []; treeGroups = []; firstRowOf = [];
       let y = 0;
@@ -1226,7 +1227,7 @@
         mjs.forEach(m => shownMJ.add(m));
 
         // 字形が一致するMJ（自身の面区点がこの字）を先に見て、その字に0番を振る
-        const isOwn = m => cp(mjmap.mj[m][1]) === it.char;
+        const isOwn = m => mjBase[m] === it.char;
         mjs.sort((a, b) => (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
         const byCh = new Map(), setOf = new Map(), tierOfRow = new Map(), tierOfEdge = new Map();
@@ -1257,7 +1258,7 @@
         const pop = b => (b >>> 0).toString(2).replace(/0/g, "").length;
         const hasTarget = (m, ch) => { const t = byCh.get(ch); return t && (setOf.get(m) & (1 << t.idx)) ? 0 : 1; };
         const repRank = m => { const j = repOf.get(m); return j == null ? 1 : hasTarget(m, jisCh[j]); };
-        const selfTarget = m => hasTarget(m, cp(mjmap.mj[m][1]));
+        const selfTarget = m => hasTarget(m, mjBase[m]);
         mjs.sort((a, b) => pop(setOf.get(a)) - pop(setOf.get(b)) || setOf.get(a) - setOf.get(b)
           || repRank(a) - repRank(b)
           || selfTarget(a) - selfTarget(b)
@@ -1359,7 +1360,7 @@
       const br = g.branches[r.b];
       const parent = br.parent >= 0 ? g.branches[br.parent] : null;
       const m = mjmap.mj[r.mj];
-      const base = cp(m[1]);
+      const base = mjBase[r.mj];
       const glyph = m[2] ? base + cp(m[2]) : base; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
       const mjX = 4 * COL_W + COL_W / 2;
       // 枠を作る枝の先頭行だけは、横線を枠の中心に通して「枠の中心から左へ出す」形にする
@@ -1515,6 +1516,11 @@
     }
     // 字の上に来た時だけ更新する。隙間を通っただけで消えると、
     // 再描画でカーソル下の要素が入れ替わるたびにハイライトが点滅してしまう。
+    // カードのクリックは委譲で受ける（5万枚ぶんのハンドラを張らないため）
+    el("kanjiContainer").addEventListener("click", e => {
+      const c = e.target.closest(".card");
+      if (c) copyText(c.dataset.char, `「${c.dataset.char}」`);
+    });
     el("kanjiContainer").addEventListener("mouseover", e => {
       const c = e.target.closest(".card");
       if (c) setHover(c.dataset.char);
@@ -1554,6 +1560,7 @@
       saveTreeOpen(tree.checked);
       // 隠していた側のペインはスクロール位置を保っていないので、残っている側を基準に引き直す
       if (tree.checked) {
+        if (treeDirty) rebuildTree(); // 閉じているあいだに変わった一覧を、開くこの時に反映する
         curAnchor = -1; lastListTop = lastTreeTop = -1;
         list.checked ? syncTree() : syncList();
       }
