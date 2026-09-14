@@ -64,6 +64,8 @@
     /* 外字（縮退先が定義されていないMJ字形）。IVSを効かせたいのでIPAmj明朝で描く */
     .card.lvl5 { border-top: 4px solid #7f8c8d; }
     .card.lvl5 .char-main { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; }
+    /* IPAmj明朝バッジをOFFにした時。字形描画をその場で切り替えるためのクラス */
+    body.no-mjfont .card.lvl5 .char-main, body.no-mjfont .tree-node .g { font-family: "Noto Serif JP", serif; }
 
     .char-main { font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 2rem; font-weight: 500; display: block; margin-bottom: 5px; line-height: 1.2; }
     
@@ -99,7 +101,13 @@
     .legend b { color: #7f8c8d; }
     .legend b.kj { color: #e67e22; }
     .legend .credit { color: #bdc3c7; }
-    .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    .font-status-btn { padding: 5px 10px; border-radius: 5px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
+    .file-btn { padding: 5px 12px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer; font-size: 0.78rem; font-weight: bold; color: #7f8c8d; }
+    .file-btn:hover { background: #ebf5fb; border-color: #3498db; color: #2980b9; }
+    /* データを読めているかどうかは丸の色で示す。どこから読んだかは title に回す */
+    .file-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #dfe4e6; margin-right: 6px; vertical-align: 1px; }
+    .file-btn.ready .dot { background: #27ae60; }
     .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
     .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
@@ -121,6 +129,9 @@
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
+    /* ツリーだけ表示。ツリーの幅は5列ぶんで決まっているので、空いた幅は左右に振って中央に置く */
+    body.list-off #kanjiContainer { display: none; }
+    body.list-off #kanjiPanes { justify-content: center; }
 
     .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 0.68rem; color: #7f8c8d; }
     .tree-head div { text-align: center; padding: 6px 0; }
@@ -166,8 +177,10 @@
     <div class="tree-bar">
       <div class="bar-group">
         <span class="bar-label">設定</span>
-        <label>データ <input type="file" id="mjmapInput" accept=".json"></label>
-        <label class="switch"><input type="checkbox" id="treeToggle" disabled> 縮退ツリー</label>
+        <label class="file-btn" id="dataBtn" title="縮退データは未読込です"><span class="dot"></span>データ<input type="file" id="mjmapInput" accept=".json" hidden></label>
+        <span class="bar-label">表示</span>
+        <label class="switch"><input type="checkbox" id="showList" checked> 一覧</label>
+        <label class="switch"><input type="checkbox" id="showTree" disabled> 縮退ツリー</label>
         <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
       </div>
       <div class="bar-group">
@@ -889,7 +902,8 @@
     const COL_LABEL = ["第1水準", "第2水準", "第3水準", "第4水準", "MJ"];
 
     let mjmap = null;
-    let hasIPAmjFont = false;
+    let ipamjInstalled = false; // IPAmj明朝がこの環境に入っているか（検出結果）
+    let useIPAmj = false;       // 字形の描画にIPAmj明朝を使うか（バッジで切り替える）
     const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
     const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
     const candByMj = new Map();   // MJ index -> [面区点の添字]
@@ -952,18 +966,31 @@
         };
         ok = draw("30px monospace") !== draw("30px 'IPAmj明朝', 'IPAmjMincho', monospace");
       }
-      hasIPAmjFont = ok;
+      ipamjInstalled = ok;
+      useIPAmj = ok;
       updateFontBadge();
     }
 
+    /* バッジが示すのは「いま何のフォントでMJ字形を描いているか」。
+       IPAmj明朝が入っているかどうかは検出結果として title に回す。
+       検出はフォント名の問い合わせしか見ていないので外すことがあり、
+       またIVSはシステムの明朝が持っていれば IPAmj明朝 なしでも描き分かる。 */
     function updateFontBadge() {
       const b = el("fontBadge");
-      b.textContent = hasIPAmjFont ? "IPAmj明朝: 有効" : "IPAmj明朝: 未検出";
-      b.className = "font-status-btn " + (hasIPAmjFont ? "status-active" : "status-inactive");
+      b.textContent = useIPAmj ? "MJ字形: IPAmj明朝" : "MJ字形: 既定の明朝";
+      b.className = "font-status-btn " + (useIPAmj ? "status-active" : "status-inactive");
+      b.title = (ipamjInstalled ? "IPAmj明朝を検出しました。" : "IPAmj明朝は検出できませんでした（入っていても検出を外すことがあります）。")
+        + "クリックで描画に使う/使わないを切り替えます";
+      document.body.classList.toggle("no-mjfont", !useIPAmj);
     }
 
     // ---- mjmap.json の取り込み ----
-    function loadMjmap(text) {
+    const DATA_SOURCE = { idb: "保存済みデータ", fetch: "mjmap.json", file: "選択したファイル" };
+    const setDataState = (ready, text) => {
+      el("dataBtn").classList.toggle("ready", ready);
+      el("dataBtn").title = text;
+    };
+    function loadMjmap(text, source) {
       mjmap = JSON.parse(text);
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
@@ -977,12 +1004,13 @@
       });
       buildEdges();
 
+      setDataState(true, `読込済み（${DATA_SOURCE[source] || "不明"}）／クリックで別のファイルを読む`);
       el("mjmapStatus").textContent =
         `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
-      el("treeToggle").disabled = false;
+      el("showTree").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
-      if (treeWasOpen()) el("treeToggle").click(); // 一覧を描いてからでないと同期の基準が無い
+      if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
     // 表示する根拠の段だけでエッジを張り直す。段を切ると縮退先が無くなるMJは外字へ回る
@@ -1007,14 +1035,14 @@
     el("mjmapInput").addEventListener("change", e => {
       const f = e.target.files[0];
       if (!f) return;
-      el("mjmapStatus").textContent = "読み込み中...";
+      setDataState(false, "読み込み中...");
       const r = new FileReader();
       r.onload = ev => {
         try {
-          loadMjmap(ev.target.result);
+          loadMjmap(ev.target.result, "file");
           idb("readwrite", s => s.put(ev.target.result, "mjmap")).catch(() => {});
         } catch (err) {
-          el("mjmapStatus").textContent = "読み込みに失敗: " + err.message;
+          setDataState(false, "読み込みに失敗: " + err.message);
         }
       };
       r.readAsText(f);
@@ -1361,7 +1389,7 @@
 
     // 一覧 → ツリー
     function syncTree() {
-      if (!mjmap || !treeRows.length || !cardEls.length) return;
+      if (!mjmap || !treeRows.length || !cardEls.length || !showsList()) return;
       const pane = el("kanjiContainer");
       const top = pane.scrollTop;
       let lo = 0, hi = cardEls.length - 1, i = 0;
@@ -1381,7 +1409,7 @@
       if (!r) return;
       setAnchor(r.anchor);
       const pane = el("kanjiContainer"), card = cardEls[r.anchor];
-      if (card) {
+      if (card && showsList()) {
         const want = paneTop(card, pane) - 8;
         if (Math.abs(pane.scrollTop - want) > 1) { pane.scrollTop = want; lastListTop = pane.scrollTop; }
       }
@@ -1443,15 +1471,27 @@
       onContext(e, g && g.dataset.k);
     });
 
-    el("treeToggle").addEventListener("change", e => {
-      const on = e.target.checked;
-      document.body.classList.toggle("tree-on", on);
-      saveTreeOpen(on);
-      if (on) { curAnchor = -1; lastListTop = lastTreeTop = -1; syncTree(); }
-    });
+    /* 一覧とツリーは独立したON/OFFなので、素直にチェック2つで持つ
+       （一覧だけ・ツリーだけ・両方の3通り）。両方OFFは何も見えなくなるだけなので押し返す。 */
+    const showsList = () => el("showList").checked;
+    function applyView(changed) {
+      const list = el("showList"), tree = el("showTree");
+      if (!list.checked && !tree.checked) {
+        if (changed === list && !tree.disabled) tree.checked = true; else list.checked = true;
+      }
+      document.body.classList.toggle("tree-on", tree.checked);
+      document.body.classList.toggle("list-off", !list.checked);
+      saveTreeOpen(tree.checked);
+      // 隠していた側のペインはスクロール位置を保っていないので、残っている側を基準に引き直す
+      if (tree.checked) {
+        curAnchor = -1; lastListTop = lastTreeTop = -1;
+        list.checked ? syncTree() : syncList();
+      }
+    }
+    ["showList", "showTree"].forEach(id => el(id).addEventListener("change", e => applyView(e.target)));
 
     el("fontBadge").addEventListener("click", () => {
-      hasIPAmjFont = !hasIPAmjFont;
+      useIPAmj = !useIPAmj;
       updateFontBadge();
     });
 
@@ -1468,7 +1508,12 @@
     function jumpToChar(ch) {
       const i = listOrder.findIndex(it => it.char === ch);
       if (i < 0) return false;
-      if (!document.body.classList.contains("tree-on")) el("treeToggle").click();
+      // 一覧へ飛ぶ操作なので、ツリーだけ表示中でも一覧を出す
+      if (!showsList() || (!document.body.classList.contains("tree-on") && mjmap)) {
+        el("showList").checked = true;
+        if (mjmap) el("showTree").checked = true;
+        applyView();
+      }
       driver = "list";
       const pane = el("kanjiContainer"), card = cardEls[i];
       const top = paneTop(card, pane);
@@ -1578,8 +1623,8 @@
       // 前回読ませた mjmap.json が残っていればファイル選択なしで復元する。
       // 無ければ同じ場所に置かれた mjmap.json を取りに行く（file:// では失敗するのでその時は手動選択）
       idb('readonly', s => s.get('mjmap'))
-        .then(t => t || fetch('mjmap.json').then(r => r.ok ? r.text() : null))
-        .then(t => { if (t) loadMjmap(t); })
+        .then(t => t ? { t, src: 'idb' } : fetch('mjmap.json').then(r => r.ok ? r.text() : null).then(t => t && { t, src: 'fetch' }))
+        .then(r => { if (r) loadMjmap(r.t, r.src); })
         .catch(() => {});
     };
   </script>
