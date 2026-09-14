@@ -1286,6 +1286,8 @@
           br.delta.forEach(t => drawn.add(t.idx));
           // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
           br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
+          br.deltaKj = br.delta.some(t => (tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0) === br.tier
+                                          && kjEdge.has(mjs[br.first] + ":" + t.idx));
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
           const up = targets.filter(t => (base & (1 << t.idx)));
           br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
@@ -1346,10 +1348,10 @@
         + `<span class="m"${copy ? ` data-copy="${copy}" title="クリックでコピー"` : ""}>${meta}</span></div>`;
     }
 
-    // その行からその縮退先へのエッジの根拠の段
-    function rowTier(mi, t) {
-      for (const [ji, ti] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return ti;
-      return 0;
+    // その行からその縮退先へのエッジの根拠の段と、それが常用漢字表の新旧字体か
+    function rowEdge(mi, t) {
+      for (const [ji, ti, kj] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return { tier: ti, kj };
+      return { tier: 0, kj: false };
     }
 
     function rowHtml(r, hit, tint) {
@@ -1374,12 +1376,16 @@
       // 親まで戻る線分を引くのは枝の先頭行だけ。2行目以降で引くと、上に幹が無い位置から
       // 線が生えて「その行が直接そこへ縮退している」ように見えてしまう。
       // 秌(MJ019007) なら MJ〜秌 は包摂なので実線、秌〜秋 は戸籍法通達なので破線になる。
-      const own = Math.max(0, ...br.delta.map(t => rowTier(r.mj, t)));
+      // 線はその行がぶら下がる一番弱い根拠で描く。その根拠が新旧字体なら橙の実線にする。
+      // ここで .kj を付けないと、曾→曽 のような新旧字体が灰の破線（＝その他の法令）に見えてしまう
+      const ownEdges = br.delta.map(t => rowEdge(r.mj, t));
+      const own = Math.max(0, ...ownEdges.map(e => e.tier));
+      const ownKj = ownEdges.some(e => e.tier === own && e.kj);
       if (r.k === br.first && parent && parent.spineX < br.loX) {
         h += `<div class="tree-line t${br.upTier}${br.kj ? " kj" : ""}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
       }
       const from = r.k === br.first ? br.loX : br.spineX;
-      h += `<div class="tree-line t${own}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
+      h += `<div class="tree-line t${own}${ownKj ? " kj" : ""}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
 
       // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
       g.branches.forEach((b2, bi) => {
@@ -1389,7 +1395,7 @@
         // この行から始まる子の枝が新旧字体なら、そこへ降ろす区間も橙にする
         const child = g.branches.find(c => c.parent === bi && c.first === r.k);
         const kj = !!(child && child.kj);
-        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj ? " kj" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
+        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj || b2.deltaKj ? " kj" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
       });
 
       if (r.k === br.first) {
