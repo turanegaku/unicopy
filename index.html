@@ -635,8 +635,11 @@
 
     // JIS漢字の一覧に入らない記号。Ideographic ではないので水準の生成から漏れるが、
     // 漢字に添えて使うのでコピーできるようにしておく。面区点は mjmap から引けるものだけ出す。
+    // 仝 は1面1区24点。漢字の区(16〜94)の外なので水準の一覧に入らず、
+    // 面区点を持つ10,054字のうち唯一どのセクションにも出ていなかった。
     const KANJI_SYMBOLS = [
       ["々", "同の字点"], ["〻", "二の字点"], ["〆", "しめ"], ["〇", "漢数字のゼロ"], ["ヶ", "箇"],
+      ["仝", "「同」の異体字（同上）"],
     ];
     const SYMBOL_CHARS = new Set(KANJI_SYMBOLS.map(([ch]) => ch));
 
@@ -1327,7 +1330,11 @@
           (candByMj.get(m) || []).forEach(([ji, ti, kj]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
-            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], col: (charLevel.get(ch) || 5) - 1, idx: byCh.size });
+            // 記号は1面1区・5区で第1〜4水準の外に居る。列が無いままだと 5列目＝MJ列へ
+            // 落ちてMJの字形と重なるので、終着点側＝第1水準の列に寄せる。
+            // 面区点は札に出るので 1-01-24 が第1水準でないことは読み取れる。
+            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], idx: byCh.size,
+                                       col: SYMBOL_CHARS.has(ch) ? 0 : (charLevel.get(ch) || 5) - 1 });
             b |= 1 << t.idx;
             if (ti > worst) worst = ti;          // 行の線はその行がぶら下がる一番弱い根拠に合わせる
             tierOfEdge.set(m + ":" + t.idx, ti);
