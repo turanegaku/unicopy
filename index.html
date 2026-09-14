@@ -1335,14 +1335,39 @@
           branches.push({ bits: setOf.get(m), first: k, last: k });
         });
 
+        // 親は自分を含む直近の枝。縮退先の少ない順に並べてあるので親は必ず自分より前に居る。
+        // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる。
+        const parentOf = branches.map((br, bi) => {
+          for (let j = bi - 1; j >= 0; j--) {
+            if ((branches[j].bits & br.bits) === branches[j].bits) return j;
+          }
+          return bi > 0 ? 0 : -1;
+        });
+
+        /* 枝を「親のすぐ後ろに子」の順へ並べ替える。
+           縮退先の数の順に並べただけだと親と子のあいだに無関係な枝が挟まり、
+           増える字の無い枝が1つ上の枝にぶら下がっているように見える。
+           国の群なら 囶(MJ008844) と 圀(MJ008853) のあいだに MJ008843 が落ちて、
+           MJ008843 が 1-51-91 へ縮退しているかのように読めていた。 */
+        const kids = branches.map(() => []);
+        const order = [];
+        parentOf.forEach((pi, bi) => { if (pi >= 0) kids[pi].push(bi); else order.push(bi); });
+        for (let n = 0; n < order.length; n++) order.splice(n + 1, 0, ...kids[order[n]]);
+        const at = new Map(order.map((bi, i) => [bi, i]));
+        const reordered = order.map(bi => {
+          const br = branches[bi];
+          const first = mjs.length;                       // 並べ替えたMJは末尾へ積んでいく
+          for (let k = br.first; k <= br.last; k++) mjs.push(mjs[k]);
+          return { bits: br.bits, first, last: mjs.length - 1, parent: at.has(parentOf[bi]) ? at.get(parentOf[bi]) : -1 };
+        });
+        const cut = reordered[0].first;                   // 元の並びを捨てて添字を詰め直す
+        mjs.splice(0, cut);
+        reordered.forEach(br => { br.first -= cut; br.last -= cut; });
+        branches.length = 0;
+        branches.push(...reordered);
+
         const drawn = new Set();
         branches.forEach((br, bi) => {
-          br.parent = -1;
-          for (let j = bi - 1; j >= 0; j--) {
-            if ((branches[j].bits & br.bits) === branches[j].bits) { br.parent = j; break; }
-          }
-          // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる
-          if (br.parent < 0 && bi > 0) br.parent = 0;
           // 親から増えたぶん。ただし既に他の枝が描いた字は二度描かない
           // （包含関係が無い枝どうしだと、親を枝0に寄せた結果ぶつかることがある）
           const base = bi === 0 ? 0 : branches[br.parent].bits;
