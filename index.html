@@ -1675,7 +1675,9 @@
       for (const s of sections) {
         const a0 = Math.max(0, Math.min(s.rows, Math.floor((v.top - s.top) / pitch)));
         const b0 = Math.max(0, Math.min(s.rows, Math.ceil((v.top + v.h - s.top) / pitch)));
-        if (b0 <= a0) { if (s.b > s.a) { s.grid.innerHTML = ""; s.a = s.b = 0; } continue; }
+        // 窓から外れたセクションは空にする。残しておくと、光らせた1枚のように
+        // もう古くなった中身がそのまま居座る（0,0 は空の印で、二度目は素通りする）
+        if (b0 <= a0) { if (s.a !== 0 || s.b !== 0) { s.grid.innerHTML = ""; s.a = s.b = 0; } continue; }
         if (a0 >= s.a && b0 <= s.b) continue;   // まだ帯の中
         const a = Math.max(0, a0 - OVER), b = Math.min(s.rows, b0 + OVER);
         let out = "";
@@ -1839,6 +1841,15 @@
       if (g) copyText(g.dataset.c, `「${g.dataset.c}」`);
     });
 
+    /* 見えているものは動かさない。外に出ているときだけ、入りきる最小の量だけ送る。
+       head は上端に貼り付く見出しのぶんで、その下からが実際に読める範囲になる。
+       画面の中の物をわざわざ端へ寄せ直すと、どこから飛んだのか目で追えなくなる。 */
+    function minScroll(cur, viewH, head, top, h) {
+      if (top - head < cur) return Math.max(0, top - head); // 上へはみ出している
+      if (top + h > cur + viewH) return top + h - viewH;    // 下へはみ出している
+      return cur;                                           // 見えているので動かさない
+    }
+
     // 一覧の該当カードへスクロールし、ツリーもその行に合わせて1秒光らせる。見つかれば true
     // 光らせる1枚はDOMに触らず添字で持つ。飛んだ先でスクロールが走ると窓が組み直されて、
     // ノードに付けたクラスは16msで消えてしまうため（ツリーの hoverChar と同じ持ち方）
@@ -1853,11 +1864,9 @@
         applyView();
       }
       driver = "list";
-      const v = listView(), top = cardY(i);
-      // 上端ぴったりだと sticky の水準見出しに潜るので、窓の1/4ほど下に置く
-      const margin = Math.min(v.h / 4, 140);
-      // 既に見えているカードをわざわざ動かすと目で追えなくなるので、外に居る時だけ動かす
-      if (top < v.top + 40 || top > v.top + v.h - 60) listScrollTo(top - margin);
+      // 76px は sticky の水準見出しのぶん。下は行が半分で切れないよう少し余分に見る
+      const v = listView(), ly = minScroll(v.top, v.h, 76, cardY(i), pitch + 12);
+      if (ly !== v.top) listScrollTo(ly);
       hoverChar = ch;
       curAnchor = -1;
       setAnchor(i); // 一覧は横に十数字並ぶのでアンカーは自動判定に任せず対象に固定する
@@ -1865,7 +1874,13 @@
       let want = treeRows[firstRowOf[i]];
       if (!want || listOrder[want.anchor].char !== ch) want = treeRows[drawnAt.get(ch)] || want;
       const tp = el("treePane");
-      if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
+      if (want) {
+        // 行の y は tree-head のぶんを差し引いた座標なので、上端は head の下に出る。
+        // 読める高さはペインから head を除いたぶん。
+        const hd = tp.querySelector(".tree-head");
+        const ty = minScroll(tp.scrollTop, tp.clientHeight - (hd ? hd.offsetHeight : 0), 0, want.y, want.h + 8);
+        if (Math.abs(tp.scrollTop - ty) > 1) { tp.scrollTop = ty; lastTreeTop = tp.scrollTop; }
+      }
       renderTreeWindow();
 
       // ペインは部首フィルタの下にあるので、画面に入っていなければページごと送る
