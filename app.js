@@ -1179,7 +1179,7 @@
 
     /* ---- ツリーの行を組む ----
        行の並びは一覧のカード順。各カードの文字に関わる MJ をその下にぶら下げる。
-       複数のJIS字に縮退するMJは、それぞれのカードの下に重複して現れる（逆引きとして正しい）。
+       複数のJIS字に縮退するMJは、一覧で先に来るカードの群に1回だけ描く（下の shownPair）。
 
        同じカードの下は「縮退先の組み合わせ」＝枝でまとめ、組み合わせが小さい順に並べる。
        枝は自分を含む直近の枝を親にして、親から増えたぶんの字だけを描く。
@@ -1196,7 +1196,7 @@
 
       treeRows = []; treeGroups = []; firstRowOf = [];
       let y = 0;
-      const shownMJ = new Set();
+      const shownPair = new Set(); // 描いた (MJ index, 面区点の添字)
       drawnAt.clear();
       listOrder.forEach((it, i) => {
         firstRowOf[i] = treeRows.length;
@@ -1211,14 +1211,28 @@
                              || (candByMj.get(m) || []).some(([ji]) => directHits.has(jisCh[ji])));
           if (!mjs.length) return;
         }
-        // 既に前の群で描いたMJだけで出来ている群は描かない。
-        // 惡(1-56-08) の群は 悪(1-16-13) の群と同じMJ・同じ縮退先を繰り返すだけなので、
-        // 縮退が集まる側（一覧で先に来る方）に一本化する。
-        // 群はそこに居るMJの縮退先を全部描くので、畳んでもその字の例示字形は先の群に出ている。
-        // 覇(1-39-38) の群が 覇 ─ MJ024210 / └ 霸(1-59-17) ─ MJ027866 と描くので、
-        // 霸 の群まで立てると [1-39-38 1-59-17] ─ MJ027866 が重ねて出るだけになる。
-        if (mjs.every(m => shownMJ.has(m))) return;
-        mjs.forEach(m => shownMJ.add(m));
+        /* この群で各MJに描く縮退先を決める。
+           (1) 前の群で既に描いた (MJ, 縮退先) の組は二度描かない。
+               惡(1-56-08) の群は 悪(1-16-13) の群と同じMJ・同じ縮退先を繰り返すだけなので、
+               縮退が集まる側（一覧で先に来る方）に一本化する。
+               邊󠄏(MJ026199) は 辺 の群に [辺 邊] で出ているので、邊 の群に重ねて出さない。
+               群はそこに居るMJの縮退先を全部描くので、畳んでもその字の例示字形は先の群に出ている。
+           (2) この群の字へのエッジより弱い根拠の縮退先は、この群では描かない。
+               辺󠄂(MJ025759) は 辺 へ包摂（実線）、邊 へ親字（破線）で、[辺 邊] の枝に入れると
+               邊 の下にぶら下がって「邊 を経て 辺 へ」と読めてしまう。辺 の群では 辺 ─ 辺󠄂 とだけ描き、
+               邊 との関係は 邊 の群で 邊 - - 辺󠄂 として出す（(1) で 辺 は落ちる）。
+           この群の字へのエッジが既に描かれているMJ、描く縮退先が無くなったMJは群から外す。 */
+        const drawSet = new Map();
+        mjs = mjs.filter(m => {
+          const es = candByMj.get(m) || [];
+          const own = es.find(([ji]) => jisCh[ji] === it.char);
+          if (!own || shownPair.has(m + ":" + own[0])) return false;
+          const keep = es.filter(([ji, ti]) => ti <= own[1] && !shownPair.has(m + ":" + ji));
+          drawSet.set(m, keep);
+          return true;
+        });
+        if (!mjs.length) return;
+        mjs.forEach(m => drawSet.get(m).forEach(([ji]) => shownPair.add(m + ":" + ji)));
 
         // 字形が一致するMJ（自身の面区点がこの字）を先に見て、その字に0番を振る
         const isOwn = m => mjBase[m] === it.char;
@@ -1228,7 +1242,7 @@
         const kjEdge = new Set(), repEdge = new Set();
         mjs.forEach(m => {
           let b = 0, worst = 0;
-          (candByMj.get(m) || []).forEach(([ji, ti, kj, rep]) => {
+          drawSet.get(m).forEach(([ji, ti, kj, rep]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
             // 記号は1面1区・5区で第1〜4水準の外に居る。列が無いままだと 5列目＝MJ列へ
