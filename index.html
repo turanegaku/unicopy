@@ -47,8 +47,8 @@
     .level-separator.lvl5 span::before, .level-separator.lvl5 span::after { background-color: #7f8c8d; }
     /* JIS水準の並びとは別物なので、見出しを一段強く離す */
     .level-separator.lvl5 { margin-top: 60px; border-top: 3px double #bdc3c7; padding-top: 22px; }
-    /* 記号は一覧の先頭に置くので、外字のような強い区切りは要らない */
-    .level-separator.lvl5.sym { margin-top: 0; border-top: none; padding-top: 0; }
+    /* 記号や外字の2区分目以降は、前の区分に続くので強い区切りを外す */
+    .level-separator.lvl5.flat { margin-top: 0; border-top: none; padding-top: 0; }
 
     /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
        カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
@@ -64,6 +64,13 @@
     /* 外字（縮退先が定義されていないMJ字形）。IVSを効かせたいのでIPAmj明朝で描く */
     .card.lvl5 { border-top: 4px solid #7f8c8d; }
     .card.lvl5 .char-main { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; }
+    /* IPAmj明朝バッジをOFFにした時。字形描画をその場で切り替えるためのクラス */
+    body.no-mjfont .card.lvl5 .char-main, body.no-mjfont .tree-node .g { font-family: "Noto Serif JP", serif; }
+    /* tokenizer.json の語彙に入っている字の印。カード全体の説明(title)とは別に、
+       丸そのものに説明を持たせたいので擬似要素ではなく実体の span で描く。
+       当たり判定を9pxに広げ、見た目の丸(5px)は背景のグラデーションで中心に置く */
+    .tok-dot { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%;
+               background: radial-gradient(circle, #16a085 0 2.5px, transparent 2.5px); }
 
     .char-main { font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 2rem; font-weight: 500; display: block; margin-bottom: 5px; line-height: 1.2; }
     
@@ -86,11 +93,20 @@
     .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
     .bar-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .bar-label { font-weight: bold; color: #95a5a6; font-size: 0.72rem; letter-spacing: 1px; }
-    .find-row { display: flex; gap: 10px; align-items: center; width: 100%; flex-wrap: wrap; }
-    .find-row input[type="text"] { padding: 7px 9px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; flex: 1; min-width: 200px; font-size: 0.95rem; }
-    .find-row .status { color: #7f8c8d; font-size: 0.85rem; }
+    /* 移動・絞り込み・検索は「ラベル | 中身」の2列グリッドに揃える。
+       ラベル幅を固定しないと行ごとに中身の左端がずれ、右端も揃わない。 */
+    /* ラベル列は一番長い「絞り込み」(0.72rem・字間1px)がちょうど収まる幅にする。
+       各行が別のグリッドなので auto にすると行ごとに幅が変わり、中身の左端が揃わない。 */
+    .find-row { display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: center; width: 100%; }
+    .find-row > .row-body { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+    .find-row input[type="text"] { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; font-size: 0.95rem; }
+    .find-row input[type="text"]:focus { outline: none; border-color: #3498db; }
+    .find-row .status { grid-column: 2; color: #7f8c8d; font-size: 0.8rem; min-height: 1em; }
+    /* 検索はラベルを placeholder に畳んだので、1列にして容器の幅いっぱいまで広げる */
+    #searchRow { grid-template-columns: 1fr; }
+    #searchRow .status { grid-column: 1; }
     /* 一覧の見出しへ飛ぶチップ。54,402枚をスクロールで辿らずに済ませる */
-    .jump-row { gap: 6px; }
+    .jump-row .row-body { gap: 6px; }
     .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
     .jump-chip:hover { background: #f4f9fd; border-color: currentColor; }
     .jump-chip .n { color: #b2bec3; font-weight: normal; margin-left: 4px; }
@@ -99,7 +115,43 @@
     .legend b { color: #7f8c8d; }
     .legend b.kj { color: #e67e22; }
     .legend .credit { color: #bdc3c7; }
-    .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    /* 根拠は6つ並ぶので、チェック箱のぶんの幅を切ってトグルチップにする。
+       input は消さずに透明で置いておく（キーボードで辿れて :has(:checked) も効く）。
+       同じ出典から来る根拠は「戸籍」の箱にまとめ、頭の「戸籍」を3回書かずに済ませる。 */
+    .src-group { display: inline-flex; align-items: center; gap: 4px; padding: 2px 5px; border: 1px solid #e4e4e4; border-radius: 6px; }
+    .src-chip { position: relative; padding: 4px 9px; border: 1px solid #ccc; border-radius: 5px; background: #fff;
+                cursor: pointer; user-select: none; font-size: 0.75rem; font-weight: bold; color: #7f8c8d; }
+    .src-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .src-chip:hover { background: #ebf5fb; }
+    .src-chip:has(input:checked) { background: #3498db; border-color: #3498db; color: #fff; }
+    .src-chip:has(input:focus-visible) { outline: 2px solid #2980b9; outline-offset: 1px; }
+    #srcSwitches { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+    .font-status-btn { padding: 5px 10px; border-radius: 5px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
+    .file-btn { padding: 5px 12px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer; font-size: 0.78rem; font-weight: bold; color: #7f8c8d; }
+    .file-btn:hover { background: #ebf5fb; border-color: #3498db; color: #2980b9; }
+    /* データを読めているかどうかは丸の色で示す。どこから読んだかは title に回す */
+    .file-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #dfe4e6; margin-right: 6px; vertical-align: 1px; }
+    .file-btn.ready .dot { background: #27ae60; }
+
+    /* appearance: base-select にすると候補リストが ::picker(select) として CSS の対象になり、
+       max-height で行数を抑えられる（OS描画のままだと高さは指定できない）。
+       対応していないブラウザはこの宣言を捨ててネイティブ描画に落ちるだけで、動作は変わらない。
+       キー操作・タイプアヘッド・支援技術は <select> のものをそのまま使う。 */
+    select.sel, select.sel::picker(select) { appearance: base-select; }
+    select.sel { padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer;
+                 font-family: inherit; font-size: 0.78rem; font-weight: bold; color: #2c3e50; }
+    select.sel:hover, select.sel:open { border-color: #3498db; }
+    select.sel::picker(select) { max-height: 16em; overflow-y: auto; margin-top: 3px; padding: 4px;
+                                 border: 1px solid #d5dbdb; border-radius: 6px; background: #fff;
+                                 box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+    select.sel optgroup { padding: 6px 8px 2px; font-size: 0.68rem; font-weight: bold; color: #95a5a6; letter-spacing: 1px; }
+    select.sel option { padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: normal; color: #2c3e50; }
+    select.sel option:hover { background: #ebf5fb; }
+    select.sel option:checked { background: #3498db; color: #fff; font-weight: bold; }
+    select.sel option::checkmark { display: none; }
+
     .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
     .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
     /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
@@ -117,10 +169,15 @@
        ページ自体は普通にスクロールし、ヘッダと部首フィルタは上へ流れて消える。
        そのぶんペインは常に画面の高さいっぱいを使える。 */
     body.tree-on #kanjiPanes { position: sticky; top: 8px; height: calc(100vh - 16px); }
-    body.tree-on #radicalListboxes { max-height: 40vh; overflow-y: auto; }
+    /* ツリーONのときに縮めるのは部首のグリッドだけ。容器ごと縮めると、
+       グリッドの下に置いた検索欄とCLEARがスクロールの外へ隠れてしまう */
+    body.tree-on .radical-grid { max-height: 28vh; overflow-y: auto; }
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
+    /* ツリーだけ表示。ツリーの幅は5列ぶんで決まっているので、空いた幅は左右に振って中央に置く */
+    body.list-off #kanjiContainer { display: none; }
+    body.list-off #kanjiPanes { justify-content: center; }
 
     .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 0.68rem; color: #7f8c8d; }
     .tree-head div { text-align: center; padding: 6px 0; }
@@ -166,26 +223,34 @@
     <div class="tree-bar">
       <div class="bar-group">
         <span class="bar-label">設定</span>
-        <label>データ <input type="file" id="mjmapInput" accept=".json"></label>
-        <label class="switch"><input type="checkbox" id="treeToggle" disabled> 縮退ツリー</label>
+        <label class="file-btn" id="dataBtn" title="縮退データは未読込です"><span class="dot"></span>データ<input type="file" id="mjmapInput" accept=".json" hidden></label>
+        <span class="bar-label">表示</span>
+        <label class="switch"><input type="checkbox" id="showList" checked> 一覧</label>
+        <label class="switch"><input type="checkbox" id="showTree" disabled> 縮退ツリー</label>
         <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
       </div>
       <div class="bar-group">
         <span class="bar-label">縮退の根拠</span>
-        <label class="switch" title="常用漢字表の「いわゆる康熙字典体」。旧字体を新字体に潰す関係で、橙の実線で描く"><input type="checkbox" id="tierKyuu" checked> 新旧字体</label>
-        <label class="switch" title="戸籍法関連通達・告示582号のうち新旧字体以外。人名異体字・俗字・誤字が中心で、灰の破線で描く"><input type="checkbox" id="tierLaw"> その他の法令・告示</label>
+        <span id="srcSwitches"></span>
       </div>
-      <div class="legend"><b>実線</b>=規格（同じ文字）　<b class="law">破線</b>=法令・告示（読み替え）　<b class="kj">橙</b>=<a href="docs/jyouyou-kyuujitai.md">常用漢字表の新旧字体</a><span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
+      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)</span></div>
     </div>
     <div class="search-container" id="radicalListboxes">
       <div class="find-row jump-row">
         <span class="bar-label">移動</span>
-        <span id="sectionJump"></span>
+        <span class="row-body" id="sectionJump"></span>
       </div>
       <div class="find-row">
-        <span class="bar-label">検索</span>
-        <input type="text" id="mjSearch" placeholder="会 / U+4F1A / MJ000089 / 1-18-81 / 1-18" disabled>
-        <span class="status" id="mjmapStatus">mjmap.json を選択してください</span>
+        <span class="bar-label">絞り込み</span>
+        <div class="row-body">
+          <label class="switch"><input type="checkbox" id="onlyJinmei"> 人名用漢字だけ (864字)</label>
+          <label class="switch" title="いま選んでいる根拠で縮退が1本でも定義されている字だけを出す。縮退元・縮退先のどちらでも当たる。包摂・統合を外せば、包摂だけで繋がっている字も消える"><input type="checkbox" id="onlyShrink"> 縮退があるものだけ</label>
+          <select id="kuFilter" class="sel"></select>
+        </div>
+      </div>
+      <div class="find-row" id="searchRow">
+        <input type="text" id="mjSearch" placeholder="検索　会 / U+4F1A / MJ006586 / 1-18-81" disabled>
+        <span class="status" id="mjmapStatus"></span>
       </div>
     </div>
     <div id="kanjiPanes">
@@ -570,10 +635,24 @@
 
     // JIS漢字の一覧に入らない記号。Ideographic ではないので水準の生成から漏れるが、
     // 漢字に添えて使うのでコピーできるようにしておく。面区点は mjmap から引けるものだけ出す。
+    // 仝 は1面1区24点。漢字の区(16〜94)の外なので水準の一覧に入らず、
+    // 面区点を持つ10,054字のうち唯一どのセクションにも出ていなかった。
     const KANJI_SYMBOLS = [
       ["々", "同の字点"], ["〻", "二の字点"], ["〆", "しめ"], ["〇", "漢数字のゼロ"], ["ヶ", "箇"],
+      ["仝", "「同」の異体字（同上）"],
     ];
     const SYMBOL_CHARS = new Set(KANJI_SYMBOLS.map(([ch]) => ch));
+
+    // 人名用漢字（戸籍法施行規則別表第二・864字／docs/jinmeiyou-kanji.md）。
+    // 全字がJIS X 0213の第1〜3水準に入っているので水準の区分はそのまま使い、
+    // 部首や検索と同じ絞り込みとして「人名用漢字だけ」を切り出せるようにする。
+    const JINMEIYOU = "丑丞乃之乎乘也云亘亙些亞亥亦亨亮仔伊伍伶伽佃佑佛侃來侑俄俐俠俣俱倖倦倭偲傭傳僞價儉儲允兎兒兜其冨冴凉凌凛凜凧凪凰凱函剩劉劍劫勁勒勳勺勿匁匡卜卯卷卽卿厨厩叉叡叢只叶吞吻吾哉哨哩啄喋喧喬單喰嘉嘗嘩噂噌嚴圃圈國圓團圭坐坦埜埴堯堰堵堺塙增壕壘壞壬壯壽夷奄奎套奧奬姥姪娃娩嬉孃孜孟宋宏宕宥寅寓寢實寬寵將專尖尤尭屑峨峯峻峽崚嵩嵯嶋嶺巌巖巢巫已巳巴巷巽帖帶幌幡庄庇庚庵廟廣廳廻廿弘弛彈彌彗彦彪彬從徠徵德徽忽怜恆恕恢恰悉悌惇惚惟惠惡惣惹惺愼慧憐應懷戊或戟戰戲托拂拔拜按挺挽捧捲捷捺掠掬揃揭搖搜摑摺撒撞撫播撰擊擢攝收敍敦斐斡斧斯於旭昂昊昌昏昴晃晄晋晏晒晚晝晟晦晨智暉暢曆曉曙曝曳曾朋朔李杏杖杜杭杵杷枇柊柏柑柘柚柴柾栖栗栞桂桐桔桧桶梁梓梛條梢梧梯梶棲椀椋椛椰椿楊楓楕楚楠楢楯榊榎榛榮槇槌槍槙槻樂樋樟樣樫樺樽橘橙橫檀檎檜檢櫂櫓櫛櫻欣欽歎此步歷殆毅每毘毬氣汀汐汝汲沌沓沫洛洲洵洸浩浬涉淀淋淚淨淳淵渚渥渴渾湊湘湛溜溢溫滉滯漕漣漱澁澪濕濡瀕瀧瀨灘灸灼烏焚焰煉煌煤熙燈燎燒燕燦燭燿爭爲爾牒牟牡牽犀狀狹狼猪獅獸玖玲珀珂珈珊琉琢琥琳琵琶瑚瑛瑞瑳瑶瓜瓢甥甫畠畢疊疋疏瘦皐皓盃盜盡眞眸瞥矩砥砦砧硯碎碓碗碧碩磐磯祁祇祐祕祢祷祿禄禎禪禮禰禱禽禾秤秦稀稔稜稟稻穗穣穰穹穿窄窪窺竣竪竺竿笈笙笠笹筈筑箔箕篇篠簞簾籾粟粥粹糊紐紗紘紬絃絆絢綜綠綴綸綺綾緋緖緣縞縣縱繡繫纂纏纖羚翔翠耀而耶耽聡聽肇肋肴胡胤脩脹腔膏臟臥與舜舵芙芥芦芭芹苑苔苺茄茅茉茜茸荻莉莊莞莫菅菖菩菫菱萄萊萌萠萩萬萱葡董葦葵葺蒐蒔蒙蒲蒼蓉蓑蓬蓮蔓蔣蔦蔭蕃蕉蕎蕗蕨蕪蕾薗薙薩薰藁藏藝藥蘇蘭虛蝦蝶螺蟬蟹蠟衞衿袈袴裝裟裡裳襖覽訊訣註詢詫誼諄諏諒諺謂謠讃讓豹貰賑賣賴赳跨蹄蹟輔輯輿轉轟辰辻辿迂迄迦迪逗這逞逢遁遙遥遼邑郁郞鄭酉醇醉醍醐醬釀釉釘釧銑鋒鋸錄錆錐錘錫鍊鍬鎧鎭鑄閃閏閤阿陀陷隈險隼雀雁雛雜雫霞靖靜鞄鞍鞘鞠鞭頁頌頗顚顯颯飜饗馨馳馴駈駕駿騷驍驗髮魁魯鮎鯉鯛鰯鱒鱗鳩鳳鳶鴨鴻鵜鵬鷄鷗鷲鷹鷺麒麟麿黃黎黑默黛鼎齊龍欄廊朗虜類猪神祥福諸都侮僧勉勤卑嘆器墨層悔憎懲敏暑梅海渚漢煮琢碑社祉祈祐祖祝禍禎穀突節練繁署者臭著視謁謹賓贈逸難響";
+    const JINMEI_CHARS = new Set(Array.from(JINMEIYOU));
+
+    // tokenizer.json（WordPiece語彙）に1文字トークンとして入っている字のうち、
+    // このツールのカードに出るものだけ。カード右上の丸で「その字はトークナイザで扱える」ことを示す。
+    const TOKENIZER_CHARS = "々〆〇〻ヶ㸃一丁七万丈三上下不与丐丑且丕世丗丘丙丞両並个中丱串丶丸丹主丼丿乂乃久之乍乎乏乕乖乗乘乙九乞也乢乱乳乾亀亂亅了予争亊事二于云互五井亘亙些亜亞亟亠亡亢交亥亦亨享京亭亮亰亳亶亷人什仁仂仄仆仇今介仍从仏仔仕他仗付仙仝仞仟代令以仭仮仰仲件价任企伉伊伍伎伏伐休会伜伝伯估伴伶伸伹伺似伽佃但佇位低住佐佑体何佗余佚佛作佝佞佩佯佰佳併佶佻佼使侃來侈例侍侏侑侖侘供依侠価侫侭侮侯侵侶便係促俄俊俎俐俑俔俗俘俚俛保俟俠信俣俤俥修俯俱俳俵俶俸俺俾倅倆倉個倍倏們倒倔倖候倚借倡倣値倥倦倨倩倪倫倬倭倶倹偁偃假偈偉偏偐偕偖做停健偬偲側偵偶偸偽傀傅傍傑傘備傚催傭傲傳傴債傷傾僂僅僉僊働像僑僕僖僚僞僣僥僧僭僮僵價僻儀儁儂億儉儒儔儕儖儘儚償儡優儲儷儺儻儼儿兀允元兄充兆兇先光克兌免兎児兒兔党兜兢入內全兩兪八公六兮共兵其具典兼冀冂内円冉冊册再冏冐冑冒冓冕冖冗写冠冢冤冥冦冨冩冪冫冬冰冱冲决冴况冶冷冽凄凅准凉凋凌凍减凖凛凜凝凞几凡処凧凩凪凭凰凱凵凶凸凹出函凾刀刃刄分切刈刊刋刎刑刔列初判別刧利刪刮到刳制刷券刹刺刻剃剄則削剋剌前剏剔剖剛剝剞剣剤剥剩剪副剰剱割剳剴創剽剿劃劄劇劈劉劍劑劒劔力功加劣助努劫劬劭励労劵効劼劾勁勃勅勇勉勍勒動勗勘務勝勞募勠勢勣勤勦勧勲勳勵勸勹勺勾勿匁匂包匆匈匍匏匐匕化北匙匚匝匠匡匣匪匯匱匳匸匹区医匿區十千卅卆升午卉半卍卑卒卓協南単博卜卞占卦卩卮卯印危即却卵卷卸卻卽卿厂厄厖厘厚原厠厥厦厨厩厭厮厰厲厳厶去参參又叉及友双反収叔取受叙叛叟叡叢口古句叨叩只叫召叭叮可台叱史右叶号司叺吁吃各合吉吊吋同名后吏吐向君吝吟吠否吩含听吭吮吳吴吶吸吹吻吼吽吾吿呀呂呆呈呉告呎呑呟周呪呰呱味呵呶呷呻呼命咀咄咆咋和咎咏咐咒咜咢咤咥咨咩咫咬咯咲咳咸咼咽咾哀品哂哄哇哈哉哘員哢哥哦哨哩哭哮哲哺哽唄唆唇唏唐唔唖售唯唱唳唸唹唾啀啄啅商啌問啓啖啗啜啝啣啻啼啾喀喃善喇喉喊喋喘喙喚喜喝喞喟喧喨喩喪喫喬單喰営嗄嗅嗇嗔嗚嗜嗟嗣嗤嗷嗹嗽嗾嘆嘈嘉嘔嘖嘗嘘嘛嘩嘯嘱嘲嘴嘶嘸噂噌噎噐噛噤器噪噫噬噴噸噺嚀嚆嚇嚊嚏嚔嚙嚠嚢嚥嚩嚮嚴嚶嚼囀囁囂囃囈囉囊囎囑囓囗囘囚四回因団囮困囲図囹固国囿圀圃圄圈圉國圍圏園圓圖團圜土圦圧在圭地圷圸圻址坂均坊坎坏坐坑坡坤坦坩坪坿垂垈垉型垓垠垢垣垤垪垰垳垽埀埃埆埋城埒埓埔埖埜域埠埣埴埵執培基埼堀堂堅堆堊堋堕堙堝堡堤堪堯堰報場堵堺堽塀塁塊塋塑塒塔塗塘塙塚塞塡塢塩填塰塲塵塹塾境墅墓増墜增墟墨墫墮墳墸墹墺墻墾壁壅壇壊壌壑壓壔壕壗壘壙壜壞壟壤壥士壬壮壯声壱売壷壹壺壻壼壽夂変夊夏夐夕外夘夙多夛夜夢夥大天太夫夬夭央失夲夷夸夾奄奇奈奉奎奏奐契奔奕套奘奚奠奢奥奧奨奩奪奬奮女奴奸好妁如妃妄妊妍妓妖妙妛妝妣妥妨妬妲妹妻妾姆姉姊始姐姑姓委姙姚姜姥姦姨姪姫姬姶姻姿威娃娉娑娘娚娛娜娟娠娥娩娯娵娶娼婀婁婆婉婚婢婦婪婬婿媒媚媛媼媽媾嫁嫂嫉嫋嫌嫐嫖嫗嫡嫣嫦嫩嫺嫻嬉嬋嬌嬖嬢嬪嬬嬰嬲嬶嬾孀孃孅子孑孔孕字存孚孛孜孝孟季孤孥学孩孫孰孱孳孵學孺宀它宅宇守安宋完宍宏宕宗官宙定宛宜宝実客宣室宥宦宮宰害宴宵家宸容宿寂寃寄寅密寇寉富寐寒寓寔寛寝寞察寡寢寤寥實寧寨審寫寬寮寰寳寵寶寸寺対寿封専射尅将將專尉尊尋對導小少尓尖尙尚尠尢尤尨尭就尸尹尺尻尼尽尾尿局屁居屆屈届屋屍屎屏屐屑屓展屛属屠屡屢層履屬屮屯山屶屹岌岐岑岔岡岨岩岫岬岱岳岶岷岸岻岼岾峅峇峙峠峡峨峩峪峭峯峰島峺峻峽崇崋崎崑崔崕崖崗崘崙崚崛崟崢崩嵋嵌嵎嵐嵒嵜嵩嵬嵯嵳嵶嶂嶄嶇嶋嶌嶐嶝嶢嶬嶮嶷嶺嶼嶽巉巌巍巒巓巖巛川州巡巢巣工左巧巨巫差己已巳巴巵巷巻巽巾市布帆帋希帑帖帙帚帛帝帥師席帯帰帳帶帷常帽幀幃幄幅幇幌幎幔幕幗幟幡幢幣幤干平年幵并幷幸幹幺幻幼幽幾广庁広庄庇床序底庖店庚府庠度座庫庭庵庶康庸廁廂廃廈廉廊廏廐廓廖廚廛廝廟廠廡廢廣廨廩廬廰廱廳廴延廷廸建廻廼廾廿弁弃弄弉弊弋弌弍式弐弑弓弔引弖弗弘弛弟弥弦弧弩弭弯弱張強弸强弼弾彁彈彊彌彎彑当彖彗彙彜彝彡形彥彦彩彪彫彬彭彰影彳彷役彼彿往征徂徃径待徇很徊律後徐徑徒従得徘徙從徠御徨復循徭微徳徴徵德徹徼徽心必忌忍忖志忘忙応忝忠忤快忰忱念忸忻忽忿怎怏怐怒怕怖怙怛怜思怠怡急怦性怨怩怪怫怯怱怺恁恂恃恆恊恋恍恐恒恕恙恚恟恠恢恣恤恥恨恩恪恫恬恭息恰恵恷悁悃悄悅悉悋悌悍悒悔悖悗悚悛悟悠患悦悧悩悪悲悳悴悵悶悸悼悽情惆惇惑惓惘惚惜惟惠惡惣惧惨惰惱想惴惶惷惹惺惻愀愁愃愆愈愉愍愎意愕愚愛感愡愧愨愬愴愼愽愾愿慂慄慇慈慊態慌慍慎慓慕慘慙慚慝慟慢慣慥慧慨慫慮慯慰慱慳慴慵慶慷慾憂憇憊憎憐憑憔憖憙憚憤憧憩憫憬憮憲憶憺憾懃懆懇懈應懊懋懌懍懐懣懦懲懴懶懷懸懺懼懽懾懿戀戈戉戊戌戍戎成我戒戔或戚戛戝戞戟戡戦截戮戯戰戱戲戳戴戶戸戻戾房所扁扇扈扉手才扎打払托扛扞扠扣扨扮扱扶批扼找承技抂抃抄抉把抑抒抓抔投抖抗折抛抜択抦披抬抱抵抹抻押抽拂担拆拇拈拉拊拌拍拏拐拑拒拓拔拗拘拙招拜拝拠拡括拭拮拯拱拳拵拶拷拾拿持挂指挈按挌挑挙挟挧挨挫振挹挺挽挾挿捉捌捍捏捐捕捗捜捧捨捩捫据捲捶捷捺捻掀掃授掉掌掎掏排掖掘掛掟掠採探掣接控推掩措掫掬掲掴掵掻掾揀揃揄揆揉描提插揖揚換握揣揩揭揮援揶揷揺搆損搏搓搔搖搗搜搦搨搬搭搴搶携搾摂摎摑摘摧摩摯摶摸摺撃撈撒撓撕撚撞撤撥撩撫播撮撰撲撹撻撼擁擂擅擇擊操擒擔擘據擠擡擢擣擦擧擬擯擱擲擴擶擺擽擾攀攅攘攜攝攣攤攪攫攬支攴攵收攷攸改攺攻放政故效敍敎敏救敕敖敗敘教敝敞敢散敦敬数敲整敵敷數斂斃文斈斉斌斎斐斑斗料斛斜斟斡斤斥斧斫斬断斯新斷方於施旁旃旄旅旆旋旌族旒旗旙旛无旡既旣日旦旧旨早旬旭旱旺旻昂昃昆昇昊昌明昏易昔昜星映春昧昨昭是昴昵昶昻昼昿晁時晃晄晉晋晏晒晚晝晞晟晢晤晦晧晨晩普景晰晴晶智暁暃暄暇暈暉暎暑暖暗暘暝暢暦暫暮暴暸暹暼暾曁曄曆曇曉曖曙曚曜曝曠曦曩曰曲曳更曵曷書曹曼曽曾替最會月有朋服朏朔朕朖朗望朝朞期朦朧木未末本札朮朱朴朶朷朸机朽朿杁杆杉李杏材村杓杖杙杜杞束杠条杢杣杤来杪杭杯杰東杲杳杵杷杼松板枅枇枉枋枌析枕林枚果枝枠枡枢枦枩枯枳枴架枷枸枹柁柄柆柊柎柏某柑染柔柘柚柝柞柢柤查柧柩柬柮柯柱柳柴柵査柾柿栂栃栄栅栓栖栗栞校栢栩株栫栲栴核根格栽桀桁桂桃框案桍桎桐桑桓桔桙桜桝桟档桧桴桶桷桾桿梁梃梅梍梏梓梔梗梛條梟梠梢梦梧梨梭梯械梱梳梵梶梹梺梼棄棆棉棊棋棍棒棔棕棗棘棚棟棠棡棣棧森棯棲棹棺椀椁椄椅椈椋椌植椎椏椒椙椚椛検椡椢椣椥椦椨椪椰椴椶椹椽椿楊楓楔楕楙楚楜楝楞楠楡楢楪楫業楮楯楳楴極楷楸楹楼楽楾榁概榊榎榑榔榕榛榜榠榧榮榱榲榴榻榾榿槁槃槇槊構槌槍槎槐槓様槙槝槞槧槨槪槫槭槲槹槻槽槿樂樅樊樋樌樒樓樔樗標樛樞樟模樢樣権横樫樮樵樶樸樹樺樽橄橇橈橋橘橙機橡橢橦橫橲橸橿檀檄檍檎檐檗檜檠檢檣檪檬檮檳檸檻櫁櫂櫃櫑櫓櫚櫛櫞櫟櫨櫪櫺櫻欄欅權欒欖欝欟欠次欣欧欲欷欸欹欺欽款歃歇歉歌歎歐歓歔歙歛歟歡止正此步武歩歪歯歲歳歴歷歸歹死歿殀殃殄殆殉殊残殍殕殖殘殞殤殪殫殯殱殲殳殴段殷殺殻殼殿毀毅毆毋母毎每毒毓比毗毘毛毟毫毬毯毳氈氏民氓气気氛氣氤水氷永氾汀汁求汎汐汕汗汚汝汞江池汢汨汪汰汲汳決汽汾沁沂沃沈沌沍沐沒沓沖沙沚沛没沢沫沮沱河沸油沺治沼沽沾沿況泄泅泉泊泌泓法泗泙泛泝泡波泣泥注泪泯泰泱泳洇洋洌洒洗洙洛洞洟津洩洪洫洲洳洵洶洸活洽派流浄浅浙浚浜浣浤浦浩浪浬浮浴海浸浹涅消涉涌涎涓涕涙涛涜涯液涵涸涼淀淅淆淇淋淌淑淒淕淘淙淚淞淡淤淦淨淪淫淬淮深淳淵混淸淹淺添淼清渇済渉渊渋渓渕渙渚減渝渟渠渡渣渤渥渦温渫測渭渮港游渺渾湃湊湍湎湖湘湛湟湧湫湮湯湲湶湾湿満溂溌溏源準溘溜溝溟溢溥溪溫溯溲溶溷溺溽滂滄滅滉滊滋滌滑滓滔滕滝滞滬滯滲滴滷滸滾滿漁漂漆漉漏漑漓演漕漠漢漣漫漬漱漲漸漾漿潁潅潑潔潘潛潜潟潤潦潭潮潯潰潴潸潺潼澀澁澂澄澆澎澑澗澡澣澤澥澪澱澳澹激濁濂濃濆濔濕濘濛濟濠濡濤濫濬濮濯濱濳濶濺濾瀁瀉瀋瀏瀑瀕瀘瀚瀛瀝瀞瀟瀦瀧瀨瀬瀰瀲瀾灌灑灘灣火灯灰灸灼災炉炊炎炒炙炬炭炮炯炳炸点為烈烋烏烙烝烟烱烹烽焉焔焙焚焜無焦然焼煉煌煎煑煕煖煙煢煤煥煦照煩煬煮煽熄熈熊熏熔熕熙熟熨熬熱熹熾燃燈燉燎燐燒燔燕燗營燠燥燦燧燬燭燮燵燹燻燼燿爆爍爐爛爨爪爬爭爰爲爵父爺爻爼爽爾爿牀牆片版牋牌牒牘牙牛牝牟牡牢牧物牲牴特牽牾犀犁犂犇犒犖犠犢犧犬犯犲状犹狀狂狃狄狆狎狐狒狗狙狛狠狡狢狩独狭狷狸狹狼狽猊猖猗猛猜猝猟猥猩猪猫献猯猴猶猷猽猾猿獄獅獎獏獗獣獨獪獰獲獵獸獺獻玄玆率玉王玖玩玲玳玻珀珂珈珊珍珎珞珠珥珪班珮珱珸現球琅理琉琢琥琲琳琴琵琶琺琿瑁瑕瑙瑚瑛瑜瑞瑟瑠瑣瑤瑩瑪瑯瑰瑳瑶瑾璃璋璞璢璧環璽瓊瓏瓔瓜瓠瓢瓣瓦瓧瓩瓮瓰瓱瓲瓶瓷瓸甃甄甅甌甍甎甑甓甕甘甚甜甞生產産甥甦用甫甬田由甲申男甸町画甼畄畆畉畊畋界畍畏畑畔留畚畛畜畝畠畢畤略畦畧畩番畫畭異畳畴畵當畷畸畿疂疆疇疉疊疋疎疏疑疔疚疝疣疥疫疱疲疳疵疸疹疼疽疾痂痃病症痊痍痒痔痕痘痙痛痞痢痣痩痰痲痳痴痹痺痼痾痿瘁瘉瘋瘍瘟瘠瘡瘢瘤瘧瘰瘴瘻療癆癇癈癌癒癖癘癜癡癢癧癨癩癪癬癰癲癶癸発登發白百皀皃的皆皇皈皋皎皐皓皖皙皚皮皰皴皷皸皹皺皿盂盃盆盈益盍盒盖盗盛盜盞盟盡監盤盥盧盪目盲直相盻盾省眄眇眈眉看県眛眞真眠眤眥眦眩眷眸眺眼着睇睚睛睡督睥睦睨睪睫睹睾睿瞋瞎瞑瞞瞠瞥瞬瞭瞰瞳瞶瞹瞻瞼瞽瞿矇矍矗矚矛矜矢矣知矧矩短矮矯石矼砂砌砒研砕砠砥砦砧砲破砺砿硅硏硝硫硬硯硲硴硼碁碆碇碌碍碎碑碓碕碗碚碣碧碩碪碯碵確碼碾磁磅磆磊磋磐磑磔磚磧磨磬磯磴磽礁礇礎礑礒礙礦礪礫礬示礼社祀祁祇祈祉祐祓祕祖祗祚祝神祟祠祢祥票祭祷祺祿禀禁禄禅禊禍禎福禝禦禧禪禮禰禱禳禹禺禽禾禿秀私秉秋科秒秕秘租秡秣秤秦秧秩秬称移稀稅稈程稍税稔稗稘稙稚稜稟稠種稱稲稷稻稼稽稾稿穀穂穃穆穉積穎穏穐穗穡穢穣穩穫穰穴究穹空穽穿突窃窄窈窒窓窕窖窗窘窟窩窪窮窯窰窶窺窿竃竄竅竇竈竊立竍竏竒竓竕站竚竜竝竟章竡竢竣童竦竪竭端竰競竸竹竺竿笂笄笆笈笊笋笏笑笘笙笛笞笠笥符笨第笳笵笶笹筅筆筈等筋筌筍筏筐筑筒答策筝筥筧筬筮筰筱筴筵筺箆箇箋箍箏箒箔箕算箘箙箚箜箝箟管箪箭箱箴箸節篁範篆篇築篋篌篏篝篠篤篥篦篩篭篳篶篷簀簇簍簑簒簓簔簗簞簟簡簣簧簪簫簷簸簽簾簿籀籃籌籍籏籐籔籖籘籟籠籤籥籬米籵籾粁粂粃粉粋粍粐粒粕粗粘粛粟粡粢粤粥粧粨粫粭粮粱粲粳粹粽精糀糂糅糊糎糒糓糖糘糜糞糟糠糢糧糯糲糴糶糸糺系糾紀紂約紅紆紊紋納紐純紕紗紘紙級紛紜素紡索紫紬紮累細紲紳紵紹紺紿終絃組絅絆絋経絎絏結絕絖絛絞絡絢絣給絨絮統絲絳絵絶絹絽綁綉綏經継続綛綜綟綠綢綣綫綬維綮綯綰綱網綴綵綸綺綻綽綾綿緃緇緊緋総緑緒緕緖緘線緜緝緞締緡緣緤編緩緬緯緲練緻縁縄縅縉縊縋縒縛縞縟縡縢縣縦縫縮縱縲縵縷縹縺縻總績繁繃繆繊繋繍織繕繖繙繚繝繞繡繦繧繩繪繫繭繰繹繻繼繽繿纂纃纈纉續纎纏纐纒纓纔纖纛纜缶缸缺缼罅罌罍罎罐网罔罕罘罟罠罧罨罩罪罫置罰署罵罷罸罹羂羃羅羆羇羈羊羌美羔羚羝羞羣群羨義羮羯羲羶羸羹羽翁翅翆翊翌習翔翕翠翡翦翩翫翰翳翹翻翼耀老考耄者耆耋而耐耒耕耗耘耙耜耡耨耳耶耻耽耿聆聊聒聖聘聚聞聟聡聢聨聯聰聲聳聴聶職聹聽聾聿肄肅肆肇肉肋肌肓肖肘肚肛肝股肢肥肩肪肬肭肯肱育肴肺胃胄胆背胎胖胙胚胛胝胞胡胤胥胯胱胴胸胼能脂脅脆脇脈脉脊脚脛脣脩脫脯脱脳脹脾腆腋腎腐腑腓腔腕腟腥腦腫腮腰腱腴腸腹腺腿膀膂膃膈膊膏膓膕膚膜膝膠膣膤膨膩膰膳膵膸膺膽膾膿臀臂臆臈臉臍臑臓臘臙臚臟臠臣臥臧臨自臭至致臺臻臼臾舁舂舅與興舉舊舌舍舎舐舒舖舗舘舛舜舞舟舩航舫般舮舳舵舶舷舸船艀艇艘艙艚艝艟艢艤艦艨艪艫艮良艱色艶艷艸艾芋芍芒芙芝芟芥芦芫芬芭芯花芳芸芹芻芽苅苑苒苓苔苗苙苛苜苞苟苡苣若苦苧苫英苳苴苹苺苻茂范茄茅茆茉茎茖茗茘茜茣茨茫茯茱茲茴茵茶茸茹荀荅草荊荏荐荒荘荳荵荷荻荼莅莇莉莊莎莓莖莚莞莟莠莢莨莪莫莱莵莽菁菅菊菌菎菓菖菘菜菟菠菩菪菫華菰菱菲菴菷菻菽萃萄萇萊萋萌萍萎萓萠萢萩萪萬萱萵萸萼落葆葉葎著葛葡葢董葦葩葫葬葭葮葯葱葵葷葹葺蒂蒄蒋蒐蒔蒙蒜蒟蒡蒭蒲蒸蒹蒻蒼蒿蓁蓄蓆蓉蓊蓋蓍蓐蓑蓖蓙蓚蓬蓮蓴蓼蓿蔀蔆蔑蔓蔔蔕蔗蔘蔚蔟蔡蔣蔦蔬蔭蔵蔽蕀蕁蕃蕈蕉蕊蕋蕎蕕蕗蕘蕚蕣蕨蕩蕪蕭蕷蕾薀薄薇薈薊薐薑薔薗薙薛薜薤薦薨薩薪薫薬薮薯薰薹薺藁藉藍藏藐藕藜藝藤藥藩藪藷藹藺藻藾蘂蘆蘇蘊蘋蘓蘖蘗蘚蘢蘭蘯蘰蘿虍虎虐虔處虚虛虜虞號虧虫虱虹虻蚊蚋蚌蚓蚕蚣蚤蚩蚪蚫蚯蚰蚶蛄蛆蛇蛉蛋蛍蛎蛔蛙蛛蛞蛟蛤蛩蛬蛭蛮蛯蛸蛹蛻蛾蜀蜂蜃蜆蜈蜉蜊蜍蜑蜒蜘蜚蜜蜥蜩蜴蜷蜻蜿蝉蝋蝌蝎蝓蝕蝗蝙蝟蝠蝣蝦蝨蝪蝮蝴蝶蝸蝿螂融螟螢螩螫螯螳螺螻螽蟀蟄蟆蟇蟋蟐蟒蟠蟬蟯蟲蟶蟷蟹蟻蟾蠅蠍蠎蠏蠑蠕蠖蠟蠡蠢蠣蠧蠱蠶蠹蠻血衂衄衆行衍衒術街衙衛衝衞衡衢衣表衫衰衲衵衷衽衾衿袁袂袈袋袍袒袖袗袙袞袢袤袪被袮袰袱袴袵袷袿裁裂裃裄装裏裔裕裘裙補裝裟裡裨裲裳裴裸裹裼製裾褂褄複褊褌褐褒褓褝褞褥褪褫褶褸褻襁襃襄襌襍襖襞襟襠襤襦襪襭襯襲襴襷襾西要覃覆覇覈覊見規覓視覗覘覚覡覦覧覩親覬覯覲観覺覽覿觀角觚觜觝解触觧觴觸言訂訃計訊訌討訐訓訖託記訛訝訟訣訥訪設許訳訴訶診註証詁詆詈詐詑詒詔評詛詞詠詢詣試詩詫詬詭詮詰話該詳詼誂誄誅誇誉誌認誑誓誕誘誚語誠誡誣誤誥誦誨說説読誰課誹誼調諂諄談請諌諍諏諒論諚諛諜諞諠諡諢諤諦諧諫諭諮諱諳諷諸諺諾謀謁謂謄謇謌謎謐謔謖謗謙謚講謝謠謡謦謨謫謬謳謹謾譁譃證譌譎譏譖識譚譛譜譟警譫譬譯議譱譲譴護譽讀讃變讌讎讐讒讓讖讙讚谷谺谿豁豆豈豊豌豎豐豕豚象豢豪豫豬豸豹豺豼貂貅貉貊貌貍貎貔貘貝貞負財貢貧貨販貪貫責貭貮貯貰貲貳貴貶買貸費貼貽貿賀賁賂賃賄資賈賊賍賎賑賓賚賛賜賞賠賢賣賤賦質賭賴賺賻購賽贄贅贇贈贊贋贍贏贐贓贔贖赤赦赧赫赭走赱赳赴起趁超越趙趣趨足趺趾跂跋跌跏跖跚跛距跟跡跣跨跪跫路跳践跼跿踈踉踊踏踐踝踞踟踪踰踴踵蹂蹄蹇蹈蹉蹊蹌蹐蹕蹙蹟蹠蹣蹤蹲蹴蹶蹼躁躄躅躇躊躋躍躑躓躔躙躡躪身躬躯躰躱躾軅軆軈車軋軌軍軒軛軟転軣軫軸軻軼軽軾較輅載輊輌輒輓輔輕輙輛輜輝輟輦輩輪輯輳輸輹輻輾輿轂轄轅轆轉轌轍轎轗轜轟轡轢轣轤辛辜辞辟辣辧辨辭辮辯辰辱農辷辺辻込辿迂迄迅迎近返迚迠迢迥迦迩迪迫迭迯述迴迷迸迹迺追退送逃逅逆逋逍逎透逐逑逓途逕逖逗這通逝逞速造逡逢連逧逮週進逵逶逸逹逼逾遁遂遅遇遉遊運遍過遏遐遑遒道達違遖遘遙遜遞遠遡遣遥遨適遭遮遯遲遵遶遷選遺遼遽避邀邁邂邃還邇邉邊邏邑那邦邨邪邯邱邵邸郁郊郎郛郞郡郢郤部郭郵郷都鄂鄒鄕鄙鄭鄰鄲酉酊酋酌配酎酒酔酖酘酢酣酥酩酪酬酲酳酵酷酸醂醇醉醋醍醐醒醗醜醢醤醪醫醬醯醴醵醸醺釀釁釆采釈釉釋里重野量釐金釖釘釛釜針釟釡釣釦釧釵釶釼釿鈍鈎鈑鈔鈕鈞鈩鈬鈴鈶鈷鈿鉄鉅鉈鉉鉋鉐鉗鉚鉛鉞鉢鉤鉦鉱鉾銀銃銅銈銑銓銕銖銘銚銛銜銭銳銷銹鋏鋒鋤鋩鋪鋭鋲鋳鋸鋺鋼錄錆錏錐錘錙錚錠錢錣錦錨錫錬錮錯録錵錺錻鍄鍊鍋鍍鍔鍖鍛鍜鍠鍬鍮鍵鍼鍾鎌鎔鎖鎗鎚鎧鎬鎭鎮鎰鎹鏃鏈鏐鏑鏖鏗鏘鏝鏡鏤鏥鏨鐃鐇鐐鐓鐔鐘鐙鐚鐡鐫鐵鐶鐸鐺鑁鑄鑑鑒鑓鑚鑛鑞鑠鑢鑪鑰鑵鑷鑼鑽鑾鑿钁長門閂閃閇閉閊開閏閑間閔閖閘閙閠関閣閤閥閧閨閭閱閲閹閻閼閾闃闇闊闌闍闔闕闖闘關闡闢闥阜阡阨阪阮阯防阻阿陀陂附陋陌降陏限陛陜陝陞陟院陣除陥陦陪陬陰陲陳陵陶陷陸険陽隅隆隈隊隋隍階随隔隕隗隘隙際障隠隣隧隨險隰隱隲隴隶隷隸隹隻隼雀雁雄雅集雇雉雋雌雍雎雑雕雖雙雛雜離難雨雪雫雰雲零雷雹電需霄霆震霈霊霍霎霏霑霓霖霙霜霞霤霧霪霰露霸霹霽霾靂靄靆靈靉靑青靖静靜非靠靡面靤靦靨革靫靭靱靴靹靺靼鞁鞄鞅鞆鞋鞍鞏鞐鞘鞜鞠鞣鞦鞨鞫鞭鞳鞴韃韆韈韋韓韜韭韮韲音韵韶韻響頁頂頃項順須頌頏預頑頒頓頗領頚頡頤頬頭頴頷頸頻頼頽顆顋題額顎顏顔顕願顚顛類顧顫顯顰顱顳顴風颪颯颱颶飃飄飆飛飜食飢飩飫飭飮飯飲飴飼飽飾餃餅餉養餌餐餒餓餔餘餝餞餠餡餤館餬餮餽餾饂饅饉饋饌饐饑饒饕饗首馗馘香馥馨馬馭馮馳馴馼駁駄駅駆駈駐駑駒駕駘駛駝駟駢駭駮駱駲駸駻駿騁騅騎騏騒験騙騨騫騰騷騾驀驂驃驅驍驒驕驗驚驛驟驢驤驥驩驪驫骨骭骰骸骼髀髄髏髑髓體高髞髟髢髣髦髪髫髭髮髯髱髴髷髻鬆鬘鬚鬟鬢鬣鬥鬧鬨鬩鬪鬮鬯鬱鬲鬻鬼魁魂魃魄魅魍魎魏魑魔魘魚魯魴鮃鮎鮑鮒鮓鮖鮗鮟鮠鮨鮪鮫鮭鮮鮴鮹鯀鯆鯉鯊鯏鯑鯒鯔鯖鯛鯡鯢鯣鯤鯨鯰鯱鯲鯵鰄鰆鰈鰉鰊鰌鰍鰐鰒鰓鰔鰕鰛鰡鰤鰥鰭鰮鰯鰰鰲鰹鰺鰻鰾鱆鱇鱈鱒鱗鱚鱠鱧鱶鱸鳥鳧鳩鳫鳬鳰鳳鳴鳶鴃鴆鴇鴈鴉鴎鴒鴕鴛鴟鴣鴦鴨鴪鴫鴬鴻鴾鴿鵁鵄鵆鵈鵐鵑鵙鵜鵝鵞鵠鵡鵤鵬鵯鵲鵺鶇鶉鶏鶚鶤鶩鶫鶯鶲鶴鶸鶺鶻鷁鷂鷄鷆鷏鷓鷙鷦鷭鷯鷲鷸鷹鷺鷽鸚鸛鸞鹵鹸鹹鹼鹽鹿麁麈麋麌麑麒麓麕麗麝麟麥麦麩麪麭麴麸麹麺麻麼麾麿黃黄黌黍黎黏黐黑黒黔默黙黛黜黝點黠黥黨黯黴黶黷黹黻黼黽鼇鼈鼎鼓鼕鼠鼡鼬鼻鼾齊齋齎齏齒齔齟齠齡齢齣齦齧齪齬齲齶齷龍龕龜龝龠朗類隆塚凞猪神祥福諸都僧免勉勤卑嘆器塀墨層悔慨懲敏既梅海漢琢社祉祈祐祖祝禎穀突節練繁署者臭著褐視謁謹賓贈逸難響頻𢌞";
+    const TOK = new Set(Array.from(TOKENIZER_CHARS));
 
     // かなの繰り返し記号（踊り字）。変体仮名と同じ用途で使うので同じ画面に置く。
     // くの字点は上半分と下半分の2文字を並べて1つの記号になる（縦書き用）。
@@ -641,6 +720,7 @@
     // --- 漢字モードのUI制御 ---
     // 構成要素ごとにradioグループを並べる。全radioがname="radical"を共有するため、
     // 唯一選択はブラウザのネイティブ挙動そのもの（JSでの排他制御は不要）。
+    let lastRadical = null; // 直前に選ばれた部首。同じものを押し直したときの解除に使う
     function buildRadicalListboxes() {
       const wrap = document.getElementById('radicalListboxes');
       const grid = document.createElement('div');
@@ -666,7 +746,13 @@
           radio.type = 'radio';
           radio.name = 'radical';
           radio.value = `${part}::${rad}`;
-          radio.onchange = renderKanji;
+          // radio は checked のままだと change が出ないので click で見る。
+          // 同じものをもう一度押したら解除＝「部首で絞らない」に戻す
+          radio.onclick = () => {
+            if (radio === lastRadical) { radio.checked = false; lastRadical = null; }
+            else lastRadical = radio;
+            renderKanji();
+          };
           chip.appendChild(radio);
           chip.appendChild(document.createTextNode(glyph));
           row.appendChild(chip);
@@ -675,6 +761,7 @@
         grid.appendChild(group);
       });
       wrap.appendChild(grid);
+      wrap.appendChild(el('searchRow')); // 検索は部首の下＝CLEARの真上に置く
 
       const clearBtn = document.createElement('button');
       clearBtn.className = 'clear-btn';
@@ -686,6 +773,12 @@
     function clearKanjiSearch() {
       const checked = document.querySelector('input[name="radical"]:checked');
       if (checked) checked.checked = false;
+      lastRadical = null;
+      el('onlyJinmei').checked = false;
+      el('onlyShrink').checked = false;
+      el('kuFilter').value = '';
+      el('mjSearch').value = '';
+      el('mjmapStatus').textContent = '';
       renderKanji();
     }
 
@@ -700,21 +793,29 @@
         const [part, rad] = checked.value.split('::');
         targetChars = new Set(KANJI_RADICALS[part][rad]);
       }
+      // 人名用漢字は第1〜3水準に散っているので、部首と同じ絞り込みとして重ねる
+      if (el('onlyJinmei').checked) {
+        targetChars = targetChars ? new Set([...targetChars].filter(c => JINMEI_CHARS.has(c))) : new Set(JINMEI_CHARS);
+      }
+      // いま選んでいる根拠で縮退が1本も無い字を落とす。根拠を絞るほどここも絞れる
+      if (el('onlyShrink').checked) {
+        targetChars = targetChars ? new Set([...targetChars].filter(c => shrinkChars.has(c))) : new Set(shrinkChars);
+      }
 
-      // 検索欄も絞り込みとして効かせる。面区点の前方一致は面・区で、それ以外は1字に解決して絞る
+      // 区の絞り込みは「面区」か「外字のブロック」のどちらか。検索欄は字の絞り込みとして別に効かせる
+      const kuOk = kuMatcher();
+      const blk = blockValue();
       const q = document.getElementById('mjSearch').value.trim();
-      const kuOk = q ? kuMatcher(q) : null;
-      if (q && !kuOk) {
-        const ch = resolveQuery(q);
-        const only = new Set(ch ? [ch] : []);
+      if (q) {
+        const only = withShrinkTargets(resolveQuery(q));
         targetChars = targetChars ? new Set([...targetChars].filter(c => only.has(c))) : only;
       }
 
       let total = 0;
       // 記号は水準の並びの外なので先頭に置く。第4水準と外字の間だと 44,349枚 に埋もれる
-      if (!kuOk) total += renderSymbols(container, targetChars);
+      if (!kuOk && !blk) total += renderSymbols(container, targetChars);
 
-      [1, 2, 3, 4].forEach(level => {
+      if (!blk) [1, 2, 3, 4].forEach(level => {
         const chars = allKanjiList[level];
         const kus = kuByLevel[level];
         const items = []; // [{char, ku}] フィルタを適用した並び（区点の昇順を維持）
@@ -736,20 +837,38 @@
         const grid = document.createElement('div');
         grid.className = 'grid';
         let prevKu = null;
-        items.forEach(({ char, ku }) => {
+        const html = items.map(({ char, ku }) => {
           const kuLabel = ku !== prevKu ? `区${ku}` : '';
           prevKu = ku;
-          createKanjiCard(char, level, ku, kuLabel, grid);
+          return kanjiCardHtml(char, level, ku, kuLabel);
         });
         container.appendChild(grid);
+        fillGrid(grid, html);
       });
 
       // 外字は面区点を持たないので、面区点で絞っているときは出さない
-      if (!kuOk) total += renderGaiji(container, targetChars);
+      if (!kuOk) total += renderGaiji(container, targetChars, blk);
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
       buildSectionJump(container);
       rebuildTree();
+    }
+
+    /* ---- 検索で当たった字の縮退先も一覧に入れる ----
+       旧字体だけを出すと、その字の群は縮退先を1行にまとめて「国—國—國」と描く。
+       これは1つのMJ字形が2つの面区点へ縮退していることの正しい表示だが、
+       縮退の向き（國 が 国 へ潰れる）は読み取れない。
+       終着点の 国 を一覧に入れれば 国 の群が出て、國 はその枝として下がる。
+       その字を字形として持つMJ（基底が一致するMJ）だけを辿るので、
+       たまたま同じ縮退先を持つだけの字までは引き込まない。 */
+    function withShrinkTargets(chars) {
+      if (!mjmap) return chars;
+      const out = new Set(chars);
+      chars.forEach(ch => (mjByChar.get(ch) || []).forEach(mi => {
+        if (mjBase[mi] !== ch) return;
+        (candByMj.get(mi) || []).forEach(([ji]) => out.add(jisCh[ji]));
+      }));
+      return out;
     }
 
     /* ---- 見出しへ飛ぶチップ ----
@@ -788,19 +907,23 @@
       syncTree();
     }
 
-    function createKanjiCard(char, level, ku, kuLabel, parent) {
-      const card = document.createElement('div');
-      card.className = `card lvl${level}`;
-      card.innerHTML = `${kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : ''}<span class="char-main">${char}</span>`;
-      card.title = `「${char}」 ${charJis.get(char) || `第${level}水準 区${ku}`}`;
-      card.dataset.char = char;
-      card.dataset.i = listOrder.length;
-      card.onclick = () => copyText(char, `漢字「${char}」`);
-      parent.appendChild(card);
+    /* カードは1枚ずつ createElement すると5万枚で効くので、HTMLを組んでグリッド単位で流し込む。
+       クリックは #kanjiContainer の委譲で受けるので、カードごとのハンドラも張らない。 */
+    function cardHtml(cls, char, title, extra) {
+      return `<div class="card ${cls}" title="${title}" data-char="${char}">`
+        + `${extra || ""}${tokDot(Array.from(char)[0])}<span class="char-main">${char}</span></div>`;
+    }
+    function kanjiCardHtml(char, level, ku, kuLabel) {
       // ツリーの行順・縦スクロール同期の基準として一覧の並びを控えておく
       charLevel.set(char, level);
       listOrder.push({ char, level, ku });
-      cardEls.push(card);
+      const jis = charJis.get(char) || (ku == null ? `第${level}水準` : `第${level}水準 区${ku}`);
+      return cardHtml(`lvl${level}`, char, `「${char}」 ${jis}`, kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : "");
+    }
+    // グリッドに流し込んだあと、DOMノードを一覧の並びと同じ順で控える
+    function fillGrid(grid, html) {
+      grid.innerHTML = html.join("");
+      for (const node of grid.children) cardEls.push(node);
     }
 
     // --- 変体仮名モードのUI制御（あ行/か行…ごとにセパレートし、ひらがな単位で改行して常時全件表示） ---
@@ -889,30 +1012,51 @@
     const COL_LABEL = ["第1水準", "第2水準", "第3水準", "第4水準", "MJ"];
 
     let mjmap = null;
-    let hasIPAmjFont = false;
+    let ipamjInstalled = false; // IPAmj明朝がこの環境に入っているか（検出結果）
+    let useIPAmj = false;       // 字形の描画にIPAmj明朝を使うか（バッジで切り替える）
     const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
     const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
+    const shrinkChars = new Set();// いま選んでいる根拠で縮退に関わる字（縮退元の字形／縮退先の両方）
     const candByMj = new Map();   // MJ index -> [面区点の添字]
     const mjIndex = new Map();    // "MJ000089" -> index
     const jisChar = new Map();    // "1-18-81" -> "会"
-    const repOf = new Map();      // MJ index -> その面区点のJIS例示字形になっている面区点のindex
+    const repOf = new Map();      // MJ index -> その面区点のJIS例示字形になっている面区点のindex（bit0）
     const charJis = new Map();    // "会" -> "1-18-81"
     let jisCh = [];               // 面区点の添字 -> 文字
+    let mjBase = [];              // MJ index -> 基底の1文字。ツリーの並べ替えで何度も引くので先に作っておく
 
     // 一覧の描画順。ツリーの行順と縦スクロール同期の基準になる
     let listOrder = [], cardEls = [];
     let treeRows = [], treeGroups = [], firstRowOf = [], drawnAt = new Map();
 
     const el = id => document.getElementById(id);
-    const cp = hex => hex ? String.fromCodePoint(parseInt(hex, 16)) : "";
+    // tokenizer.json の語彙にある字に付ける丸。丸そのものに説明を持たせるので実体の span で出す
+    const tokDot = ch => TOK.has(ch) ? '<span class="tok-dot" title="tokenizer.json の語彙にある字"></span>' : '';
     const push = (map, k, v) => { const a = map.get(k); a ? a.push(v) : map.set(k, [v]); };
     const mjName = num => "MJ" + String(num).padStart(6, "0");
-    // 0=規格(JIS包摂規準・UCS統合規則) 1=法令・告示(戸籍法通達/582号) 2=辞書・類推のみ
-    const tierOf = bits => bits & 1 ? 0 : (bits & 6 ? 1 : 2);
-    // 規格は常時ON、辞書・類推は常時OFF（データには持つが描かない）。
-    // 法令・告示は「常用漢字表の新旧字体」とそれ以外で別々に切り替える。
-    const showKyuu = { law: false, kyuu: true };
-    const BIT_KYUUJITAI = 1 << 5; // 常用漢字表のいわゆる康熙字典体（docs/jyouyou-kyuujitai.md）
+    /* 縮退の根拠。mjmap.json の縮退先は1エッジにこのビットを複数立てて持つ（meta.bits に同じ並び）。
+       bit0 はJIS例示字形（下の BIT_REP）で根拠の選択の対象外なので、SRC は bit1 から始まる。
+       強い順に並べてあり、線種は立っている根拠のうち一番強いもので決める。
+       tier 0=実線（規格）、1=破線（法令・告示）、2=点線（辞書・類推）。新旧字体は橙の実線。
+       常用漢字表の新旧字体は戸籍法通達の部分集合ではない（包摂や582号だけで繋がる組が7本ある）
+       ので独立したビットを持ち、強さの順どおり包摂の次に置いてある。 */
+    const SRC = [
+      { id: "srcJis",    label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
+      { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（466本）" },
+      { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
+      { id: "srcGoji",   label: "誤字俗字",   tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
+      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "src582",    label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等に係る漢字氏名の表記（12,568本）" },
+      // 辞書・類推は縮退の根拠としては弱すぎて常用しないので、データには持つがチップは出さない
+      { id: "srcDict",   label: "辞書",       tier: 2, on: false, hidden: true, title: "辞書類等による関連字（15,958本）" },
+      { id: "srcGuess",  label: "読み・字形", tier: 2, on: false, hidden: true, title: "読み・字形による類推（413本）" },
+    ];
+    SRC.forEach((s, i) => s.bit = 1 << (i + 1));
+    const BIT_REP = 1;
+    const BIT_KYUUJITAI = SRC.find(s => s.kj).bit;
+    const srcMask = () => SRC.reduce((m, s) => m | (s.on ? s.bit : 0), 0);
+    // 立っている根拠のうち一番強いものの段。SRC は強い順なので先に見つかったものが答え
+    const tierOf = bits => (SRC.find(s => bits & s.bit) || { tier: 2 }).tier;
 
     // ---- ツリーの開閉だけ localStorage に覚える（読めない環境では黙って既定に倒す） ----
     const TREE_PREF = "unicopy.treeOpen";
@@ -952,69 +1096,113 @@
         };
         ok = draw("30px monospace") !== draw("30px 'IPAmj明朝', 'IPAmjMincho', monospace");
       }
-      hasIPAmjFont = ok;
+      ipamjInstalled = ok;
+      useIPAmj = ok;
       updateFontBadge();
     }
 
+    /* バッジが示すのは「いま何のフォントでMJ字形を描いているか」。
+       IPAmj明朝が入っているかどうかは検出結果として title に回す。
+       検出はフォント名の問い合わせしか見ていないので外すことがあり、
+       またIVSはシステムの明朝が持っていれば IPAmj明朝 なしでも描き分かる。 */
     function updateFontBadge() {
       const b = el("fontBadge");
-      b.textContent = hasIPAmjFont ? "IPAmj明朝: 有効" : "IPAmj明朝: 未検出";
-      b.className = "font-status-btn " + (hasIPAmjFont ? "status-active" : "status-inactive");
+      b.textContent = useIPAmj ? "MJ字形: IPAmj明朝" : "MJ字形: 既定の明朝";
+      b.className = "font-status-btn " + (useIPAmj ? "status-active" : "status-inactive");
+      b.title = (ipamjInstalled ? "IPAmj明朝を検出しました。" : "IPAmj明朝は検出できませんでした（入っていても検出を外すことがあります）。")
+        + "クリックで描画に使う/使わないを切り替えます";
+      document.body.classList.toggle("no-mjfont", !useIPAmj);
     }
 
     // ---- mjmap.json の取り込み ----
-    function loadMjmap(text) {
+    const DATA_SOURCE = { idb: "保存済みデータ", fetch: "mjmap.json", file: "選択したファイル" };
+    const setDataState = (ready, text) => {
+      el("dataBtn").classList.toggle("ready", ready);
+      el("dataBtn").title = text;
+    };
+    function loadMjmap(text, source) {
       mjmap = JSON.parse(text);
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
-      mjmap.mj.forEach((m, i) => mjIndex.set(mjName(m[0]), i));
       repOf.clear();
-      (mjmap.rep || []).forEach(([mi, ji]) => repOf.set(mi, ji));
-      jisCh = mjmap.jis.map(j => cp(j[1]));
+      jisCh = mjmap.jis.map(j => j[1]);
+      mjBase = mjmap.mj.map(m => m[1] && String.fromCodePoint(m[1].codePointAt(0)));
+      mjmap.mj.forEach((m, i) => {
+        mjIndex.set(mjName(m[0]), i);
+        m[2].forEach(([ji, bits]) => { if (bits & BIT_REP) repOf.set(i, ji); });
+      });
       mjmap.jis.forEach((j, k) => {
         jisChar.set(j[0], jisCh[k]);
         if (!charJis.has(jisCh[k])) charJis.set(jisCh[k], j[0]);
       });
       buildEdges();
 
-      el("mjmapStatus").textContent =
-        `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`;
-      el("treeToggle").disabled = false;
+      setDataState(true, `読込済み（${DATA_SOURCE[source] || "不明"}）／クリックで別のファイルを読む`);
+      el("mjmapStatus").textContent = "";
+      el("showTree").disabled = false;
       el("mjSearch").disabled = false;
       renderKanji(); // MJ外字セクションが増えるので一覧ごと描き直す（末尾で rebuildTree される）
-      if (treeWasOpen()) el("treeToggle").click(); // 一覧を描いてからでないと同期の基準が無い
+      fillGaijiBlocks();
+      if (treeWasOpen()) { el("showTree").checked = true; applyView(); } // 一覧を描いてからでないと同期の基準が無い
     }
 
-    // 表示する根拠の段だけでエッジを張り直す。段を切ると縮退先が無くなるMJは外字へ回る
+    /* 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る。
+       ただし、その面区点の正字（X0213 包摂区分0 かつ「実装したUCS」あり＝bit0）への
+       エッジは根拠の選択に関わらず残す。縮退マップはこれを包摂規準のエッジとして
+       持っている（MJ自身の面区点は別枠では持っていない）が、中身は縮退ではなく
+       「この字形がこの面区点の字である」という1:1の対応なので、包摂を外したからと
+       いって消してよいものではない。消すと 亜(1-16-01) の字形 MJ006454 や
+       亞(1-48-19) が丸ごと落ちて、亞→亜 の新旧字体だけが宙に浮いた1行になる。
+
+       残すのはこの正字のエッジだけ。基底の符号位置が同じでも包摂規準が当たっているMJ
+       （医+E0102=MJ007821 は規準U118で1-16-69へ、醫+E0102=MJ026548 も同じくU118）は
+       字形が違うので、その面区点との関係は1:1ではなく包摂である。
+       区分0は1つの面区点に複数あることがあり（10,909本／10,054面区点、785面区点が2つ以上）、
+       愛(1-16-06) は MJ011751(E0102) と MJ011752(E0101) の両方が区分0だが、
+       「実装したUCS」を持つ MJ011752 だけが正字として bit0 を持つ。 */
     function buildEdges() {
       candByMj.clear(); mjByChar.clear();
-      mjmap.cand.forEach(([mi, ji, bits]) => {
-        const t = tierOf(bits);
-        if (t === 2) return;
-        const kj = !!(bits & BIT_KYUUJITAI);
-        if (t === 1 && !(kj ? showKyuu.kyuu : showKyuu.law)) return;
-        push(candByMj, mi, [ji, t, kj]);
+      shrinkChars.clear();
+      const mask = srcMask();
+      mjmap.mj.forEach((m, mi) => m[2].forEach(([ji, bits]) => {
+        const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
+        if (!on && !(bits & BIT_REP)) return;
+        push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI)]);
         push(mjByChar, jisCh[ji], mi);
-      });
+        // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
+        if (on) {
+          shrinkChars.add(jisCh[ji]);
+          if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
+        }
+      }));
     }
 
-    [["tierLaw", "law"], ["tierKyuu", "kyuu"]].forEach(([id, key]) =>
-      el(id).addEventListener("change", e => {
-        showKyuu[key] = e.target.checked;
-        if (mjmap) { buildEdges(); renderKanji(); }
-      }));
+    // 続きのグループは1つの箱にまとめて、頭に出典名を1回だけ書く
+    el("srcSwitches").innerHTML = SRC.reduce((h, s, i) => {
+      if (s.hidden) return h;
+      const prev = SRC[i - 1];
+      if (s.group !== (prev && !prev.hidden ? prev.group : undefined)) {
+        if (prev && prev.group) h += "</span>";
+        if (s.group) h += `<span class="src-group"><span class="bar-label">${s.group}</span>`;
+      }
+      return h + `<label class="src-chip" title="${s.title}"><input type="checkbox" id="${s.id}"${s.on ? " checked" : ""}>${s.label}</label>`;
+    }, "") + (SRC.filter(s => !s.hidden).pop().group ? "</span>" : "");
+    SRC.filter(s => !s.hidden).forEach(s => el(s.id).addEventListener("change", e => {
+      s.on = e.target.checked;
+      if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
+    }));
 
     el("mjmapInput").addEventListener("change", e => {
       const f = e.target.files[0];
       if (!f) return;
-      el("mjmapStatus").textContent = "読み込み中...";
+      setDataState(false, "読み込み中...");
       const r = new FileReader();
       r.onload = ev => {
         try {
-          loadMjmap(ev.target.result);
+          loadMjmap(ev.target.result, "file");
           idb("readwrite", s => s.put(ev.target.result, "mjmap")).catch(() => {});
         } catch (err) {
-          el("mjmapStatus").textContent = "読み込みに失敗: " + err.message;
+          setDataState(false, "読み込みに失敗: " + err.message);
         }
       };
       r.readAsText(f);
@@ -1041,23 +1229,18 @@
       if (!items.length) return 0;
 
       const sep = document.createElement("div");
-      sep.className = "level-separator lvl5 sym";
+      sep.className = "level-separator lvl5 flat";
       sep.innerHTML = "<span>記号</span>";
       container.appendChild(sep);
       const grid = document.createElement("div");
       grid.className = "grid";
       container.appendChild(grid);
 
-      items.forEach(([ch, name]) => {
-        const card = document.createElement("div");
-        card.className = "card lvl5";
-        card.innerHTML = `<span class="char-main">${ch}</span>`;
+      // 記号はツリーの行を持たない（縮退先ではなく添え字なので）ので listOrder には積まない
+      grid.innerHTML = items.map(([ch, name]) => {
         const jis = charJis.get(ch);
-        card.title = `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`;
-        card.dataset.char = ch;
-        card.onclick = () => copyText(ch, `「${ch}」`);
-        grid.appendChild(card);
-      });
+        return cardHtml("lvl5", ch, `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`);
+      }).join("");
       return items.length;
     }
 
@@ -1065,7 +1248,7 @@
        縮退先が1つも定義されていないMJ字形。ツリーに出すと2万3千行かさばるだけなので、
        一覧側で灰色の1セクションとして眺められるようにする。
        （縮退先を持つJIS外のMJ字形はツリーのMJ列に出るので、ここには入らない） */
-    function renderGaiji(container, targetChars) {
+    function renderGaiji(container, targetChars, blk) {
       if (!mjmap) return 0;
       const items = [];
       mjmap.mj.forEach((m, i) => {
@@ -1074,16 +1257,18 @@
         // charLevel は第1〜4水準だけを持つ（外字は入れない）ので、この has() は水準字かどうかを見る
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
-        const ch = cp(m[1]) + (m[2] ? cp(m[2]) : "");
+        const base = mjBase[i], ch = m[1];
         if (SYMBOL_CHARS.has(ch)) return; // 記号セクションに出しているので重ねない
         if (targetChars !== null && !targetChars.has(ch)) return;
-        items.push({ char: ch, mj: mjName(m[0]), code: parseInt(m[1], 16) });
+        const code = ch.codePointAt(0);
+        if (blk && cjkBlock(code) !== blk) return;
+        items.push({ char: ch, base, mj: mjName(m[0]), code });
       });
       if (!items.length) return 0;
       items.sort((a, b) => a.code - b.code || a.mj.localeCompare(b.mj));
 
-      // ブロックは 拡張A/統合/互換/拡張B〜F にまたがるが、見出しを分けるとかさばるので
-      // 1項目にまとめ、どのブロックの字かは各カードの tooltip に出す
+      // 外字は面区点を持たないので、水準側の「区」の札にあたるものがUnicodeブロックになる。
+      // 区分を分けずに1本のグリッドのまま、ブロックが変わった最初のカードだけ札を出す。
       const sep = document.createElement("div");
       sep.className = "level-separator lvl5";
       sep.innerHTML = "<span>MJ外字</span>";
@@ -1092,18 +1277,15 @@
       grid.className = "grid";
       container.appendChild(grid);
 
-      items.forEach(it => {
-        const card = document.createElement("div");
-        card.className = "card lvl5";
-        card.innerHTML = `<span class="char-main">${it.char}</span>`;
-        card.title = `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${cjkBlock(it.code)}`;
-        card.dataset.char = it.char;
-        card.dataset.i = listOrder.length;
-        card.onclick = () => copyText(it.char, `「${it.char}」`);
-        grid.appendChild(card);
+      let prevBlock = null;
+      fillGrid(grid, items.map(it => {
+        const blockName = cjkBlock(it.code);
+        const label = blockName !== prevBlock ? `<span class="ku-tag">${blockName}</span>` : "";
+        prevBlock = blockName;
         listOrder.push({ char: it.char, level: 5, mj: it.mj });
-        cardEls.push(card);
-      });
+        return cardHtml("lvl5", it.char,
+          `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${blockName}`, label);
+      }));
       return items.length;
     }
 
@@ -1115,9 +1297,14 @@
        枝は自分を含む直近の枝を親にして、親から増えたぶんの字だけを描く。
        2字以上増える枝は枠で囲み、その中心から左へ出して └ で親に繋ぐ。
        横線はその枝の幹から右にしか伸びないので、交点に点を打たなくても読める。 */
+    let treeDirty = false;
     function rebuildTree() {
       const pane = el("treePane");
       if (!mjmap) { pane.innerHTML = '<div class="tree-empty">縮退データ未読込</div>'; return; }
+      // ツリーを閉じているあいだは組まない。5万4千行ぶんのレイアウト計算が一覧の描き直しに
+      // 毎回乗ると、部首を解除しただけで1秒近く固まる。開いたときにまとめて組む。
+      if (!document.body.classList.contains("tree-on")) { treeDirty = true; return; }
+      treeDirty = false;
 
       treeRows = []; treeGroups = []; firstRowOf = [];
       let y = 0;
@@ -1134,7 +1321,7 @@
         mjs.forEach(m => shownMJ.add(m));
 
         // 字形が一致するMJ（自身の面区点がこの字）を先に見て、その字に0番を振る
-        const isOwn = m => cp(mjmap.mj[m][1]) === it.char;
+        const isOwn = m => mjBase[m] === it.char;
         mjs.sort((a, b) => (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
         const byCh = new Map(), setOf = new Map(), tierOfRow = new Map(), tierOfEdge = new Map();
@@ -1144,7 +1331,11 @@
           (candByMj.get(m) || []).forEach(([ji, ti, kj]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
-            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], col: (charLevel.get(ch) || 5) - 1, idx: byCh.size });
+            // 記号は1面1区・5区で第1〜4水準の外に居る。列が無いままだと 5列目＝MJ列へ
+            // 落ちてMJの字形と重なるので、終着点側＝第1水準の列に寄せる。
+            // 面区点は札に出るので 1-01-24 が第1水準でないことは読み取れる。
+            if (!t) byCh.set(ch, t = { ch, jis: mjmap.jis[ji][0], idx: byCh.size,
+                                       col: SYMBOL_CHARS.has(ch) ? 0 : (charLevel.get(ch) || 5) - 1 });
             b |= 1 << t.idx;
             if (ti > worst) worst = ti;          // 行の線はその行がぶら下がる一番弱い根拠に合わせる
             tierOfEdge.set(m + ":" + t.idx, ti);
@@ -1165,7 +1356,7 @@
         const pop = b => (b >>> 0).toString(2).replace(/0/g, "").length;
         const hasTarget = (m, ch) => { const t = byCh.get(ch); return t && (setOf.get(m) & (1 << t.idx)) ? 0 : 1; };
         const repRank = m => { const j = repOf.get(m); return j == null ? 1 : hasTarget(m, jisCh[j]); };
-        const selfTarget = m => hasTarget(m, cp(mjmap.mj[m][1]));
+        const selfTarget = m => hasTarget(m, mjBase[m]);
         mjs.sort((a, b) => pop(setOf.get(a)) - pop(setOf.get(b)) || setOf.get(a) - setOf.get(b)
           || repRank(a) - repRank(b)
           || selfTarget(a) - selfTarget(b)
@@ -1179,14 +1370,39 @@
           branches.push({ bits: setOf.get(m), first: k, last: k });
         });
 
+        // 親は自分を含む直近の枝。縮退先の少ない順に並べてあるので親は必ず自分より前に居る。
+        // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる。
+        const parentOf = branches.map((br, bi) => {
+          for (let j = bi - 1; j >= 0; j--) {
+            if ((branches[j].bits & br.bits) === branches[j].bits) return j;
+          }
+          return bi > 0 ? 0 : -1;
+        });
+
+        /* 枝を「親のすぐ後ろに子」の順へ並べ替える。
+           縮退先の数の順に並べただけだと親と子のあいだに無関係な枝が挟まり、
+           増える字の無い枝が1つ上の枝にぶら下がっているように見える。
+           国の群なら 囶(MJ008844) と 圀(MJ008853) のあいだに MJ008843 が落ちて、
+           MJ008843 が 1-51-91 へ縮退しているかのように読めていた。 */
+        const kids = branches.map(() => []);
+        const order = [];
+        parentOf.forEach((pi, bi) => { if (pi >= 0) kids[pi].push(bi); else order.push(bi); });
+        for (let n = 0; n < order.length; n++) order.splice(n + 1, 0, ...kids[order[n]]);
+        const at = new Map(order.map((bi, i) => [bi, i]));
+        const reordered = order.map(bi => {
+          const br = branches[bi];
+          const first = mjs.length;                       // 並べ替えたMJは末尾へ積んでいく
+          for (let k = br.first; k <= br.last; k++) mjs.push(mjs[k]);
+          return { bits: br.bits, first, last: mjs.length - 1, parent: at.has(parentOf[bi]) ? at.get(parentOf[bi]) : -1 };
+        });
+        const cut = reordered[0].first;                   // 元の並びを捨てて添字を詰め直す
+        mjs.splice(0, cut);
+        reordered.forEach(br => { br.first -= cut; br.last -= cut; });
+        branches.length = 0;
+        branches.push(...reordered);
+
         const drawn = new Set();
         branches.forEach((br, bi) => {
-          br.parent = -1;
-          for (let j = bi - 1; j >= 0; j--) {
-            if ((branches[j].bits & br.bits) === branches[j].bits) { br.parent = j; break; }
-          }
-          // 包含関係が無い枝も、群の字だけは枝0が描いているので親を0に寄せる
-          if (br.parent < 0 && bi > 0) br.parent = 0;
           // 親から増えたぶん。ただし既に他の枝が描いた字は二度描かない
           // （包含関係が無い枝どうしだと、親を枝0に寄せた結果ぶつかることがある）
           const base = bi === 0 ? 0 : branches[br.parent].bits;
@@ -1194,6 +1410,8 @@
           br.delta.forEach(t => drawn.add(t.idx));
           // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
           br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
+          br.deltaKj = br.delta.some(t => (tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0) === br.tier
+                                          && kjEdge.has(mjs[br.first] + ":" + t.idx));
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
           const up = targets.filter(t => (base & (1 << t.idx)));
           br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
@@ -1254,10 +1472,10 @@
         + `<span class="m"${copy ? ` data-copy="${copy}" title="クリックでコピー"` : ""}>${meta}</span></div>`;
     }
 
-    // その行からその縮退先へのエッジの根拠の段
-    function rowTier(mi, t) {
-      for (const [ji, ti] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return ti;
-      return 0;
+    // その行からその縮退先へのエッジの根拠の段と、それが常用漢字表の新旧字体か
+    function rowEdge(mi, t) {
+      for (const [ji, ti, kj] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return { tier: ti, kj };
+      return { tier: 0, kj: false };
     }
 
     function rowHtml(r, hit, tint) {
@@ -1265,8 +1483,8 @@
       const br = g.branches[r.b];
       const parent = br.parent >= 0 ? g.branches[br.parent] : null;
       const m = mjmap.mj[r.mj];
-      const base = cp(m[1]);
-      const glyph = m[2] ? base + cp(m[2]) : base; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
+      const base = mjBase[r.mj];
+      const glyph = m[1]; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
       const mjX = 4 * COL_W + COL_W / 2;
       // 枠を作る枝の先頭行だけは、横線を枠の中心に通して「枠の中心から左へ出す」形にする
       const boxed = r.k === br.first && br.delta.length > 1;
@@ -1282,12 +1500,16 @@
       // 親まで戻る線分を引くのは枝の先頭行だけ。2行目以降で引くと、上に幹が無い位置から
       // 線が生えて「その行が直接そこへ縮退している」ように見えてしまう。
       // 秌(MJ019007) なら MJ〜秌 は包摂なので実線、秌〜秋 は戸籍法通達なので破線になる。
-      const own = Math.max(0, ...br.delta.map(t => rowTier(r.mj, t)));
+      // 線はその行がぶら下がる一番弱い根拠で描く。その根拠が新旧字体なら橙の実線にする。
+      // ここで .kj を付けないと、曾→曽 のような新旧字体が灰の破線（＝その他の法令）に見えてしまう
+      const ownEdges = br.delta.map(t => rowEdge(r.mj, t));
+      const own = Math.max(0, ...ownEdges.map(e => e.tier));
+      const ownKj = ownEdges.some(e => e.tier === own && e.kj);
       if (r.k === br.first && parent && parent.spineX < br.loX) {
         h += `<div class="tree-line t${br.upTier}${br.kj ? " kj" : ""}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
       }
       const from = r.k === br.first ? br.loX : br.spineX;
-      h += `<div class="tree-line t${own}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
+      h += `<div class="tree-line t${own}${ownKj ? " kj" : ""}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
 
       // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
       g.branches.forEach((b2, bi) => {
@@ -1297,7 +1519,7 @@
         // この行から始まる子の枝が新旧字体なら、そこへ降ろす区間も橙にする
         const child = g.branches.find(c => c.parent === bi && c.first === r.k);
         const kj = !!(child && child.kj);
-        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj ? " kj" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
+        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj || b2.deltaKj ? " kj" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
       });
 
       if (r.k === br.first) {
@@ -1361,7 +1583,7 @@
 
     // 一覧 → ツリー
     function syncTree() {
-      if (!mjmap || !treeRows.length || !cardEls.length) return;
+      if (!mjmap || !treeRows.length || !cardEls.length || !showsList()) return;
       const pane = el("kanjiContainer");
       const top = pane.scrollTop;
       let lo = 0, hi = cardEls.length - 1, i = 0;
@@ -1381,7 +1603,7 @@
       if (!r) return;
       setAnchor(r.anchor);
       const pane = el("kanjiContainer"), card = cardEls[r.anchor];
-      if (card) {
+      if (card && showsList()) {
         const want = paneTop(card, pane) - 8;
         if (Math.abs(pane.scrollTop - want) > 1) { pane.scrollTop = want; lastListTop = pane.scrollTop; }
       }
@@ -1417,6 +1639,11 @@
     }
     // 字の上に来た時だけ更新する。隙間を通っただけで消えると、
     // 再描画でカーソル下の要素が入れ替わるたびにハイライトが点滅してしまう。
+    // カードのクリックは委譲で受ける（5万枚ぶんのハンドラを張らないため）
+    el("kanjiContainer").addEventListener("click", e => {
+      const c = e.target.closest(".card");
+      if (c) copyText(c.dataset.char, `「${c.dataset.char}」`);
+    });
     el("kanjiContainer").addEventListener("mouseover", e => {
       const c = e.target.closest(".card");
       if (c) setHover(c.dataset.char);
@@ -1443,15 +1670,28 @@
       onContext(e, g && g.dataset.k);
     });
 
-    el("treeToggle").addEventListener("change", e => {
-      const on = e.target.checked;
-      document.body.classList.toggle("tree-on", on);
-      saveTreeOpen(on);
-      if (on) { curAnchor = -1; lastListTop = lastTreeTop = -1; syncTree(); }
-    });
+    /* 一覧とツリーは独立したON/OFFなので、素直にチェック2つで持つ
+       （一覧だけ・ツリーだけ・両方の3通り）。両方OFFは何も見えなくなるだけなので押し返す。 */
+    const showsList = () => el("showList").checked;
+    function applyView(changed) {
+      const list = el("showList"), tree = el("showTree");
+      if (!list.checked && !tree.checked) {
+        if (changed === list && !tree.disabled) tree.checked = true; else list.checked = true;
+      }
+      document.body.classList.toggle("tree-on", tree.checked);
+      document.body.classList.toggle("list-off", !list.checked);
+      saveTreeOpen(tree.checked);
+      // 隠していた側のペインはスクロール位置を保っていないので、残っている側を基準に引き直す
+      if (tree.checked) {
+        if (treeDirty) rebuildTree(); // 閉じているあいだに変わった一覧を、開くこの時に反映する
+        curAnchor = -1; lastListTop = lastTreeTop = -1;
+        list.checked ? syncTree() : syncList();
+      }
+    }
+    ["showList", "showTree"].forEach(id => el(id).addEventListener("change", e => applyView(e.target)));
 
     el("fontBadge").addEventListener("click", () => {
-      hasIPAmjFont = !hasIPAmjFont;
+      useIPAmj = !useIPAmj;
       updateFontBadge();
     });
 
@@ -1468,7 +1708,12 @@
     function jumpToChar(ch) {
       const i = listOrder.findIndex(it => it.char === ch);
       if (i < 0) return false;
-      if (!document.body.classList.contains("tree-on")) el("treeToggle").click();
+      // 一覧へ飛ぶ操作なので、ツリーだけ表示中でも一覧を出す
+      if (!showsList() || (!document.body.classList.contains("tree-on") && mjmap)) {
+        el("showList").checked = true;
+        if (mjmap) el("showTree").checked = true;
+        applyView();
+      }
       driver = "list";
       const pane = el("kanjiContainer"), card = cardEls[i];
       const top = paneTop(card, pane);
@@ -1504,48 +1749,108 @@
       return true;
     }
 
-    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 の4通りを受ける ---- */
+    /* ---- 検索: 文字 / U+xxxx / MJxxxxxx / 面区点 を受け、当たった字の集合を返す ----
+       MJ番号と符号位置は前方一致でも拾う。MJ0068 なら MJ006800〜MJ006899 が、
+       U+4F1 なら U+4F10〜U+4F1F がまとめて当たる。桁を全部打てば従来どおり1字になる。
+       MJ字形はIVS付きの札でも一覧に出ているので、基底とIVS付きの両方を集合に入れる。 */
     function resolveQuery(q) {
       q = q.trim();
-      if (!q) return null;
+      const out = new Set();
+      if (!q) return out;
       let m;
-      if (m = /^MJ(\d{6})$/i.exec(q)) { const i = mjIndex.get("MJ" + m[1]); return i == null ? null : cp(mjmap.mj[i][1]); }
-      if (m = /^U\+?([0-9a-f]{4,6})$/i.exec(q)) return String.fromCodePoint(parseInt(m[1], 16));
-      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
-        const k = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-        return jisChar.get(k) || null;
+      if (m = /^MJ(\d{1,6})$/i.exec(q)) {
+        // 桁を揃えて打っても（MJ0068）、頭の0を省いて打っても（MJ89）前方一致で拾う
+        const dig = m[1];
+        if (mjmap) mjmap.mj.forEach((x, i) => {
+          const n = String(x[0]);
+          if (!x[1] || !(n.padStart(6, "0").startsWith(dig) || n.startsWith(dig))) return;
+          out.add(mjBase[i]); out.add(x[1]);
+        });
+        return out;
       }
-      return Array.from(q)[0];
+      if (m = /^U\+?([0-9a-f]{1,6})$/i.exec(q)) {
+        const pre = m[1].toUpperCase();
+        const hex = c => c.codePointAt(0).toString(16).toUpperCase();
+        [1, 2, 3, 4].forEach(lv => allKanjiList[lv].forEach(c => { if (hex(c).startsWith(pre)) out.add(c); }));
+        if (mjmap) mjmap.mj.forEach((x, i) => {
+          if (!x[1] || !hex(mjBase[i]).startsWith(pre)) return;
+          out.add(mjBase[i]); out.add(x[1]);
+        });
+        return out;
+      }
+      if (m = /^([12])-(\d{1,2})-(\d{1,2})$/.exec(q)) {
+        const ch = jisChar.get(`${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`);
+        if (ch) out.add(ch);
+        return out;
+      }
+      Array.from(q).forEach(c => out.add(c));
+      return out;
     }
 
-    // 面区点の前方一致。"1" なら1面ぜんぶ、"1-18" なら1面18区ぜんぶ。
-    // 点まで書かれた "1-18-81" は resolveQuery が1字に解決するのでここでは受けない。
-    // 面は水準から決まる（第1〜3水準=面1、第4水準=面2）ので mjmap を読んでいなくても効く。
-    function kuMatcher(q) {
-      const m = /^([12])(?:-(\d{1,2}))?$/.exec(q);
-      if (!m) return null;
-      const men = +m[1], ku = m[2] == null ? null : +m[2];
-      return (level, cardKu) => (level === 4 ? 2 : 1) === men && (ku === null || cardKu === ku);
+    /* 区の絞り込み。面区（1-16 など）と MJ外字のブロック（CJK拡張A など）を1つの箱に入れ、
+       どの水準の区なのかは optgroup で束ねる。面は水準から決まる（第1〜3水準=1面、第4水準=2面）
+       ので、面区のほうは mjmap を読んでいなくても効く。 */
+    const kuValue = () => el("kuFilter").value;
+    const blockValue = () => kuValue().startsWith("blk:") ? kuValue().slice(4) : null;
+    function kuMatcher() {
+      const v = kuValue();
+      if (!v || blockValue()) return null;
+      const men = +v.slice(0, 1), ku = +v.slice(2);
+      return (level, cardKu) => (level === 4 ? 2 : 1) === men && cardKu === ku;
+    }
+    function buildKuFilter() {
+      const sel = el("kuFilter");
+      sel.innerHTML = '<option value="">区: すべて</option>';
+      [1, 2, 3, 4].forEach(lv => {
+        const men = lv === 4 ? 2 : 1;
+        const ks = [...new Set(kuByLevel[lv].map(ku => `${men}-${String(ku).padStart(2, "0")}`))].sort();
+        if (!ks.length) return;
+        const g = document.createElement("optgroup");
+        g.label = `第${lv}水準`;
+        ks.forEach(k => g.appendChild(new Option(k, k)));
+        sel.appendChild(g);
+      });
+      sel.addEventListener("change", runSearch);
+    }
+
+    /* 外字のブロックは mjmap を読まないと分からないので、読み込んだあとで足す。
+       縮退の根拠を切ると外字に回る字が変わるので、そのたびに引き直す。 */
+    function fillGaijiBlocks() {
+      const sel = el("kuFilter");
+      const keep = sel.value;
+      const old = sel.querySelector('optgroup[label="MJ外字"]');
+      if (old) old.remove();
+      const seen = new Set();
+      mjmap.mj.forEach((m, i) => {
+        if (!m[1]) return;
+        const to = candByMj.get(i);
+        if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
+        if (SYMBOL_CHARS.has(m[1])) return; // 記号は外字に出さない
+        seen.add(cjkBlock(m[1].codePointAt(0)));
+      });
+      const g = document.createElement("optgroup");
+      g.label = "MJ外字";
+      CJK_BLOCKS.map(b => b[2]).concat("その他").forEach(name => {
+        if (seen.has(name)) g.appendChild(new Option(name, "blk:" + name));
+      });
+      sel.appendChild(g);
+      sel.value = keep;
+      if (!sel.value) sel.value = ""; // 消えたブロックを選んでいたら「すべて」に戻す
     }
 
     function runSearch() {
       const q = el("mjSearch").value.trim();
       renderKanji(); // 検索も絞り込みなので一覧ごと組み直す（末尾で rebuildTree される）
       const st = el("mjmapStatus");
-      if (!q) {
-        st.textContent = mjmap
-          ? `MJ ${mjmap.mj.length.toLocaleString()}字 / 縮退エッジ ${mjmap.cand.length.toLocaleString()}件`
-          : "mjmap.json を選択してください";
-        return;
-      }
-      if (kuMatcher(q)) { st.textContent = `${q} に ${listOrder.length.toLocaleString()}字`; return; }
-      const ch = resolveQuery(q);
-      if (!ch) { st.textContent = "見つかりませんでした"; return; }
+      if (!q) { st.textContent = ""; return; }
+      if (!listOrder.length) { st.textContent = "一覧に該当なし"; return; }
+      // 一覧が1枚に絞れたときだけ縮退の中身まで出す。前方一致で広く当たったときは件数だけ
+      if (listOrder.length !== 1) { st.textContent = `${listOrder.length.toLocaleString()}字が該当`; return; }
+      const ch = Array.from(listOrder[0].char)[0]; // 外字のカードはIVS付きなので基底を見る
       const mjs = mjByChar.get(ch) || [];
       const outOf = new Set();
       mjs.forEach(i => (candByMj.get(i) || []).forEach(([ji]) => { if (jisCh[ji] !== ch) outOf.add(mjmap.jis[ji][0]); }));
       st.textContent = `「${ch}」 縮退元 ${mjs.length}字 / 縮退先 ${outOf.size}種 (${[...outOf].sort().join(" ") || "なし"})`;
-      if (!listOrder.some(it => it.char === ch)) st.textContent += " ※一覧に無い字";
     }
 
     // 入力のたびに絞る。一覧の組み直しは重いので少し待つ（IME変換中は確定まで待つ）
@@ -1553,6 +1858,8 @@
     const scheduleSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 250); };
     ["input", "compositionend"].forEach(ev =>
       el("mjSearch").addEventListener(ev, e => { if (!e.isComposing) scheduleSearch(); }));
+    ["onlyJinmei", "onlyShrink"].forEach(id => el(id).addEventListener("change", runSearch));
+
     el("mjSearch").addEventListener("keydown", e => {
       if (e.key === "Enter") { clearTimeout(searchTimer); runSearch(); }
     });
@@ -1570,17 +1877,28 @@
     // 初期化実行
     window.onload = () => {
       initData();
+      buildKuFilter(); // 面区の選択肢は initData が並べた区データから作る
       buildRadicalListboxes();
       renderKanji();
       renderHentaigana();
       checkIPAmjFont();
       wireSync();
       // 前回読ませた mjmap.json が残っていればファイル選択なしで復元する。
-      // 無ければ同じ場所に置かれた mjmap.json を取りに行く（file:// では失敗するのでその時は手動選択）
+      // 無ければ同じ場所に置かれた mjmap.json を取りに行く。
+      // file:// のページはオリジンを持たない扱いなので、同じフォルダに置いてあっても
+      // fetch は止められ、IndexedDB も http:// で保存したぶんは見えない。
+      // 黙って未読込のままにすると理由が分からないので、その場合は手動選択を促す。
       idb('readonly', s => s.get('mjmap'))
-        .then(t => t || fetch('mjmap.json').then(r => r.ok ? r.text() : null))
-        .then(t => { if (t) loadMjmap(t); })
-        .catch(() => {});
+        .then(t => t ? { t, src: 'idb' } : fetch('mjmap.json').then(r => r.ok ? r.text() : null).then(t => t && { t, src: 'fetch' }))
+        .catch(() => null)
+        .then(r => {
+          if (r) return loadMjmap(r.t, r.src);
+          const why = /^https?:$/.test(location.protocol)
+            ? 'mjmap.json が見つかりません'
+            : `${location.protocol}// で開いているため mjmap.json を自動で読めません`;
+          setDataState(false, why + '。クリックして mjmap.json を選んでください');
+          el('mjmapStatus').textContent = why + '。「データ」から mjmap.json を選ぶか、ローカルサーバ経由で開いてください';
+        });
     };
   </script>
 </body>
