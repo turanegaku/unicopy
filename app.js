@@ -1094,16 +1094,20 @@
           if (!hop.on) return;
           const t = tierOf(hop.on);
           const e = es.get(nj) || es.set(nj, { on: 0, bits: 0, kt: null }).get(nj);
-          if (e.kt == null || t < e.kt) e.kt = t;
+          if (e.kt == null || t < e.kt) { e.kt = t; e.via = jisCh[ji]; }
         })));
       }
       edges.forEach((es, mi) => {
-        es.forEach(({ on, bits, kt }, ji) => {
+        es.forEach(({ on, bits, kt, via }, ji) => {
           // 直接のエッジと派生した新旧字体のうち強いほうの段。正字だけのエッジ（on=0）は元のビットで
           let tier = on ? tierOf(on) : kt == null ? tierOf(bits) : 9;
           let kj = !!((on || bits) & BIT_KYUUJITAI);
           if (kt != null && kt <= tier) { tier = kt; kj = kt === 0; }
-          push(candByMj, mi, [ji, tier, kj, !!(bits & BIT_REP)]);
+          // 線の tooltip に出す根拠。選んでいる根拠と、正字・派生した新旧字体
+          const why = SRC.filter(x => on & x.bit).map(x => x.label);
+          if (bits & BIT_REP) why.unshift("JIS例示字形");
+          if (kt != null && !(on & BIT_KYUUJITAI)) why.push(`新旧字体（${via} を経て）`);
+          push(candByMj, mi, [ji, tier, kj, !!(bits & BIT_REP), why.join("・")]);
           push(mjByChar, jisCh[ji], mi);
         });
         /* 絞り込みの「縮退があるものだけ」で使う。いま選んでいる根拠のエッジを1本でも持つMJが
@@ -1360,15 +1364,7 @@
           const base = bi === 0 ? 0 : branches[br.parent].bits;
           br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)) && !drawn.has(t.idx));
           br.delta.forEach(t => drawn.add(t.idx));
-          // 枝の幹は、その枝にぶら下がる全行の、枝が増やす縮退先へのエッジのうち一番弱い根拠で描く。
-          // 先頭行だけで決めると、誤字俗字だけ ON のとき 邊 の枝の幹が先頭の正字 邊󠄈 の青い実線に
-          // なり、破線でぶら下がる誤字たちまで規格で繋がっているように見える。
-          // 正字の青は、枝の全行が正字のときだけ（1:1 の対応しか無い枝）。
-          const rows = []; for (let k = br.first; k <= br.last; k++) rows.push(mjs[k]);
-          const key = (m, t) => m + ":" + t.idx;
-          br.tier = Math.max(0, ...rows.flatMap(m => br.delta.map(t => tierOfEdge.get(key(m, t)) || 0)));
-          br.deltaKj = rows.some(m => br.delta.some(t => (tierOfEdge.get(key(m, t)) || 0) === br.tier && kjEdge.has(key(m, t))));
-          br.deltaRep = rows.every(m => br.delta.some(t => repEdge.has(key(m, t))));
+          // 幹の線種は行ごとに rowHtml で決める（自分の行へはその行の根拠、子の枝へはその枝が親へ上がる根拠）
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
           const up = targets.filter(t => (base & (1 << t.idx)));
           br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
@@ -1404,7 +1400,7 @@
           if (!drawnAt.has(t.ch)) drawnAt.set(t.ch, treeRows.length + br.first);
         }));
         const gi = treeGroups.length;
-        treeGroups.push({ branches });
+        treeGroups.push({ branches, targets, row0: treeRows.length });
         const brOf = [];
         branches.forEach((br, bi) => { for (let k = br.first; k <= br.last; k++) brOf[k] = bi; });
         mjs.forEach((m, k) => {
@@ -1432,9 +1428,13 @@
 
     // その行からその縮退先へのエッジの根拠の段と、新旧字体か・JIS例示字形か
     function rowEdge(mi, t) {
-      for (const [ji, ti, kj, rep] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return { tier: ti, kj, rep };
-      return { tier: 0, kj: false, rep: false };
+      for (const [ji, ti, kj, rep, why] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return { tier: ti, kj, rep, why };
+      return { tier: 0, kj: false, rep: false, why: "" };
     }
+    // 線の tooltip。「字形 → 縮退先(面区点): 根拠」を縮退先ごとに1行
+    const esc = str => String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const edgeTitle = (mi, ts) => esc(ts.map(t => `${mjmap.mj[mi][1]} → ${t.ch}(${t.jis}): ${rowEdge(mi, t).why || "?"}`).join("\n"));
+    const lineCls = (tier, kj, rep) => `t${tier}${kj ? " kj" : ""}${rep ? " rep" : ""}`;
 
     function rowHtml(r, hit, tint) {
       const g = treeGroups[r.g];
@@ -1464,22 +1464,36 @@
       const own = Math.max(0, ...ownEdges.map(e => e.tier));
       const ownKj = ownEdges.some(e => e.tier === own && e.kj);
       const ownRep = ownEdges.some(e => e.rep);
+      // 親へ戻る線と、親の幹のうちこの枝へ降りてくる区間は、この枝のMJから親側の縮退先への根拠で描く
+      const upTargets = parent ? g.targets.filter(t => parent.bits & (1 << t.idx)) : [];
       if (r.k === br.first && parent && parent.spineX < br.loX) {
-        h += `<div class="tree-line t${br.upTier}${br.kj ? " kj" : ""}${br.rep ? " rep" : ""}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
+        h += `<div class="tree-line ${lineCls(br.upTier, br.kj, br.rep)}" title="${edgeTitle(r.mj, upTargets)}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
       }
       const from = r.k === br.first ? br.loX : br.spineX;
-      h += `<div class="tree-line t${own}${ownKj ? " kj" : ""}${ownRep ? " rep" : ""}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
+      h += `<div class="tree-line ${lineCls(own, ownKj, ownRep)}" title="${edgeTitle(r.mj, br.delta)}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
 
-      // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
+      /* 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く。
+         幹の区間は「どの行へ降りていくか」で根拠が変わる。枝自身の行どうしを繋ぐ区間は枝の根拠、
+         枝の最後の行から下の、子の枝へ降りていく区間は、その子の枝が親へ上がる根拠で描く。
+         1行の中でも横線の上と下で行き先が違う（上は自分へ、下は次の行へ）ので、2本に分けて描く。 */
       g.branches.forEach((b2, bi) => {
         if (r.k < b2.first || r.k > b2.to) return;
-        const from = r.k === b2.first ? r.ex * SUB_H + 28 : 0;
-        const to = r.k === b2.to ? lineY : r.h;
-        // この行から始まる子の枝が新旧字体なら、そこへ降ろす区間も橙にする
-        const child = g.branches.find(c => c.parent === bi && c.first === r.k);
-        const kj = !!(child && child.kj);
-        const rp = !!(child && child.rep);
-        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj || b2.deltaKj ? " kj" : ""}${rp || b2.deltaRep ? " rep" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
+        const rowMj = k => treeRows[g.row0 + k].mj;
+        const styleTo = k => {
+          if (k <= b2.last) {
+            // 枝自身の行へ降りる区間は、その行のMJから枝の縮退先への根拠。横線と同じ線種になる
+            const es = b2.delta.map(t => rowEdge(rowMj(k), t));
+            const tier = Math.max(0, ...es.map(e => e.tier));
+            return { cls: lineCls(tier, es.some(e => e.tier === tier && e.kj), es.some(e => e.rep)), title: "" };
+          }
+          const c = g.branches.filter(c => c.parent === bi && c.first >= k).sort((a, b) => a.first - b.first)[0];
+          const up = g.targets.filter(t => b2.bits & (1 << t.idx));
+          return { cls: lineCls(c.upTier, c.kj, c.rep), title: edgeTitle(rowMj(c.first), up) };
+        };
+        const top = r.k === b2.first ? r.ex * SUB_H + 28 : 0;
+        const bus = (y0, y1, st) => y1 > y0 ? `<div class="tree-bus ${st.cls}"${st.title ? ` title="${st.title}"` : ""} style="left:${b2.spineX}px;top:${y0}px;height:${y1 - y0}px"></div>` : "";
+        h += bus(top, Math.min(lineY, r.h), styleTo(r.k));                    // この行の横線まで
+        if (r.k < b2.to) h += bus(Math.max(top, lineY), r.h, styleTo(r.k + 1)); // 次の行へ
       });
 
       if (r.k === br.first) {
