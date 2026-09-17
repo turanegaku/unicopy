@@ -21,7 +21,7 @@
     .clear-btn { padding: 10px 20px; font-size: 1rem; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     .clear-btn:hover { background: #c0392b; }
 
-    /* 構成要素ごとのradioグループ。全radioがname="radical"を共有するのでHTMLの仕組みだけで排他選択になる（JS不要） */
+    /* 構成要素ごとの部首チップ。複数選べて、選んだぶんはANDで絞る（旁が刂で脚が心、のように引ける） */
     .radical-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; width: 100%; }
     .radical-group { border: 2px solid #ddd; border-radius: 6px; padding: 6px 8px 8px; transition: border-color 0.2s; }
     .radical-group:has(input:checked) { border-color: #3498db; }
@@ -877,9 +877,8 @@
     }
 
     // --- 漢字モードのUI制御 ---
-    // 構成要素ごとにradioグループを並べる。全radioがname="radical"を共有するため、
-    // 唯一選択はブラウザのネイティブ挙動そのもの（JSでの排他制御は不要）。
-    let lastRadical = null; // 直前に選ばれた部首。同じものを押し直したときの解除に使う
+    // 構成要素ごとにチップを並べる。チェックボックスなので複数選べ、選んだぶんはANDで重なる。
+    // 1つの字は へん・つくり・かんむり… を同時に持つので、位置をまたいで重ねるのが自然な絞り込みになる。
     function buildRadicalListboxes() {
       const wrap = document.getElementById('radicalListboxes');
       const grid = document.createElement('div');
@@ -904,18 +903,12 @@
           const chip = document.createElement('label');
           chip.className = i < RADICAL_REAL[part] ? 'radical-chip' : 'radical-chip sub';
           chip.title = `${yomi || rad}（${part}）`;
-          const radio = document.createElement('input');
-          radio.type = 'radio';
-          radio.name = 'radical';
-          radio.value = `${part}::${rad}`;
-          // radio は checked のままだと change が出ないので click で見る。
-          // 同じものをもう一度押したら解除＝「部首で絞らない」に戻す
-          radio.onclick = () => {
-            if (radio === lastRadical) { radio.checked = false; lastRadical = null; }
-            else lastRadical = radio;
-            renderKanji();
-          };
-          chip.appendChild(radio);
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.name = 'radical';
+          box.value = `${part}::${rad}`;
+          box.onchange = renderKanji;   // 入り切りはチェックボックスそのものに任せる
+          chip.appendChild(box);
           chip.appendChild(document.createTextNode(rad));
           row.appendChild(chip);
         });
@@ -933,9 +926,7 @@
     }
 
     function clearKanjiSearch() {
-      const checked = document.querySelector('input[name="radical"]:checked');
-      if (checked) checked.checked = false;
-      lastRadical = null;
+      document.querySelectorAll('input[name="radical"]:checked').forEach(b => { b.checked = false; });
       el('onlyJinmei').checked = false;
       el('onlyShrink').checked = false;
       el('kuFilter').value = '';
@@ -950,14 +941,15 @@
       listOrder = []; sections = [];
 
       let targetChars = null; // null = すべて
-      const checked = document.querySelector('input[name="radical"]:checked');
-      if (checked) {
-        const [part, rad] = checked.value.split('::');
-        targetChars = new Set(KANJI_RADICALS[part][rad]);
+      // 部首は複数選べる。選んだぶんはANDで重ねる（人名用漢字や検索と同じ畳み方）
+      document.querySelectorAll('input[name="radical"]:checked').forEach(box => {
+        const [part, rad] = box.value.split('::');
+        const set = new Set(KANJI_RADICALS[part][rad]);
         // 外字は数が多いので一覧には埋め込まず mjmap.json に置いてある。読めていれば足す
         const gai = mjmap && mjmap.radicals && (mjmap.radicals[part] || {})[rad];
-        if (gai) for (const c of gai) targetChars.add(c);
-      }
+        if (gai) for (const c of gai) set.add(c);
+        targetChars = targetChars ? new Set([...targetChars].filter(c => set.has(c))) : set;
+      });
       // 人名用漢字は第1〜3水準に散っているので、部首と同じ絞り込みとして重ねる
       if (el('onlyJinmei').checked) {
         targetChars = targetChars ? new Set([...targetChars].filter(c => JINMEI_CHARS.has(c))) : new Set(JINMEI_CHARS);
