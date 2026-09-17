@@ -30,9 +30,10 @@
     .chip-row { display: flex; flex-wrap: wrap; gap: 5px; max-height: 116px; overflow-y: auto; }
     .radical-chip { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; font-family: "Noto Serif JP", serif; font-size: 1.15rem; }
     .radical-chip:hover { background: #ebf5fb; }
-    /* 伝統的な部首名を持たない、IDSの分解から出ただけの構成部品。控えめに、後ろに並べる */
-    .radical-chip.sub { color: #95a5a6; border-style: dashed; }
-    .radical-chip.sub:has(input:checked) { color: #fff; border-style: solid; }
+    /* 伝統的な部首名を持たない、IDSの分解から出ただけの構成部品。後ろに並べ、枠線だけ点線にする
+       （字まで薄くすると肝心のグリフが読みにくい） */
+    .radical-chip.sub { border-style: dashed; }
+    .radical-chip.sub:has(input:checked) { border-style: solid; }
     .radical-chip:has(input:checked) { background: #3498db; color: #fff; border-color: #3498db; }
     .radical-chip input { display: none; }
 
