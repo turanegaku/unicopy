@@ -1503,7 +1503,7 @@
           h += `<div class="tree-box" style="left:${l}px;top:-1px;width:${w}px;height:${br.lines * SUB_H + 2}px"></div>`;
         }
         br.delta.forEach(t => {
-          h += nodeHtml(t.x, (r.ex - t.slot) * SUB_H - 1, LEVEL_COLOR[t.col + 1], t.ch, t.jis, t.ch === hit, tint);
+          h += nodeHtml(t.x, (r.ex - t.slot) * SUB_H - 1, LEVEL_COLOR[t.col + 1], t.ch, t.jis, t.ch === hit, tint, t.jis);
         });
       }
       return h + nodeHtml(mjX, mjTop, LEVEL_COLOR[5], glyph, mjName(m[0]), base === hit, tint, mjName(m[0])) + "</div>";
