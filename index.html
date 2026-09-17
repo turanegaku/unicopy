@@ -899,13 +899,11 @@
           // IDSが返す部品はもともと位置別の字体（亻 氵 扌 忄 灬 …）なので、それを1文字出すだけでよい。
           // 読みと件数は幅を食うのでtitleに回す。
           // 先頭 RADICAL_REAL[part] 個が字書に載っている部首で、そこから後ろは
-          // IDSの分解から出ただけの構成部品（米かんむりのような呼び名は無い）。破線で薄く出す。
+          // IDSの分解から出ただけの構成部品（米かんむりのような呼び名は無い）。枠線を破線にする。
           const yomi = (RADICAL_READING[part] || {})[rad];
-          const real = i < RADICAL_REAL[part];
           const chip = document.createElement('label');
-          chip.className = real ? 'radical-chip' : 'radical-chip sub';
-          chip.title = real ? `${yomi || rad}（${PART_LABELS[part]}）`
-                            : `${yomi || rad}（${part}にある構成部品・部首名なし）`;
+          chip.className = i < RADICAL_REAL[part] ? 'radical-chip' : 'radical-chip sub';
+          chip.title = `${yomi || rad}（${part}）`;
           const radio = document.createElement('input');
           radio.type = 'radio';
           radio.name = 'radical';
