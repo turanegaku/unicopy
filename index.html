@@ -207,6 +207,9 @@
     /* 常用漢字表の新旧字体。破線だと埋もれるので、橙の実線で描く（縦の幹も同じ） */
     .tree-line.kj { height: 1px; border-top: none; background: #e67e22; }
     .tree-bus.kj { width: 1px; border-left: none; background: #e67e22; }
+    /* JIS例示字形。その面区点の字そのものを表す1:1の線なので、縮退と区別して青の実線で描く */
+    .tree-line.rep { height: 1px; border-top: none; background: #3498db; }
+    .tree-bus.rep { width: 1px; border-left: none; background: #3498db; }
     .tree-bus.t1 { width: 0; background: none; border-left: 1px dashed #cfd8dc; }
     .tree-bus.t2 { width: 0; background: none; border-left: 1px dotted #b0bec5; }
     .tree-box { position: absolute; border: 1px solid #cfd8dc; border-radius: 5px; background: rgba(255,255,255,.5); }
@@ -1347,7 +1350,7 @@
       mjmap.mj.forEach((m, mi) => m[2].forEach(([ji, bits]) => {
         const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
         if (!on && !(bits & BIT_REP)) return;
-        push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI)]);
+        push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI), !!(bits & BIT_REP)]);
         push(mjByChar, jisCh[ji], mi);
         // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
         if (on) {
@@ -1491,10 +1494,10 @@
         mjs.sort((a, b) => (isOwn(a) === isOwn(b) ? a - b : isOwn(a) ? -1 : 1));
 
         const byCh = new Map(), setOf = new Map(), tierOfRow = new Map(), tierOfEdge = new Map();
-        const kjEdge = new Set();
+        const kjEdge = new Set(), repEdge = new Set();
         mjs.forEach(m => {
           let b = 0, worst = 0;
-          (candByMj.get(m) || []).forEach(([ji, ti, kj]) => {
+          (candByMj.get(m) || []).forEach(([ji, ti, kj, rep]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
             // 記号は1面1区・5区で第1〜4水準の外に居る。列が無いままだと 5列目＝MJ列へ
@@ -1506,6 +1509,7 @@
             if (ti > worst) worst = ti;          // 行の線はその行がぶら下がる一番弱い根拠に合わせる
             tierOfEdge.set(m + ":" + t.idx, ti);
             if (kj) kjEdge.add(m + ":" + t.idx);
+            if (rep) repEdge.add(m + ":" + t.idx);
           });
           setOf.set(m, b);
           tierOfRow.set(m, worst);
@@ -1578,12 +1582,14 @@
           br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
           br.deltaKj = br.delta.some(t => (tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0) === br.tier
                                           && kjEdge.has(mjs[br.first] + ":" + t.idx));
+          br.deltaRep = br.delta.some(t => repEdge.has(mjs[br.first] + ":" + t.idx));
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
           const up = targets.filter(t => (base & (1 << t.idx)));
           br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
-          br.kj = false;
-          for (let k = br.first; k <= br.last && !br.kj; k++) {
-            br.kj = up.some(t => kjEdge.has(mjs[k] + ":" + t.idx));
+          br.kj = false; br.rep = false;
+          for (let k = br.first; k <= br.last && !(br.kj && br.rep); k++) {
+            br.kj = br.kj || up.some(t => kjEdge.has(mjs[k] + ":" + t.idx));
+            br.rep = br.rep || up.some(t => repEdge.has(mjs[k] + ":" + t.idx));
           }
 
           // 増えたぶんの字を列ごとに縦へ積み、枠の中心を幹の位置にする
@@ -1638,10 +1644,10 @@
         + `<span class="m"${copy ? ` data-copy="${copy}" title="クリックでコピー"` : ""}>${meta}</span></div>`;
     }
 
-    // その行からその縮退先へのエッジの根拠の段と、それが常用漢字表の新旧字体か
+    // その行からその縮退先へのエッジの根拠の段と、新旧字体か・JIS例示字形か
     function rowEdge(mi, t) {
-      for (const [ji, ti, kj] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return { tier: ti, kj };
-      return { tier: 0, kj: false };
+      for (const [ji, ti, kj, rep] of candByMj.get(mi) || []) if (jisCh[ji] === t.ch) return { tier: ti, kj, rep };
+      return { tier: 0, kj: false, rep: false };
     }
 
     function rowHtml(r, hit, tint) {
@@ -1671,11 +1677,12 @@
       const ownEdges = br.delta.map(t => rowEdge(r.mj, t));
       const own = Math.max(0, ...ownEdges.map(e => e.tier));
       const ownKj = ownEdges.some(e => e.tier === own && e.kj);
+      const ownRep = ownEdges.some(e => e.rep);
       if (r.k === br.first && parent && parent.spineX < br.loX) {
-        h += `<div class="tree-line t${br.upTier}${br.kj ? " kj" : ""}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
+        h += `<div class="tree-line t${br.upTier}${br.kj ? " kj" : ""}${br.rep ? " rep" : ""}" style="left:${parent.spineX}px;top:${lineY}px;width:${br.loX - parent.spineX}px"></div>`;
       }
       const from = r.k === br.first ? br.loX : br.spineX;
-      h += `<div class="tree-line t${own}${ownKj ? " kj" : ""}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
+      h += `<div class="tree-line t${own}${ownKj ? " kj" : ""}${ownRep ? " rep" : ""}" style="left:${from}px;top:${lineY}px;width:${mjX - from}px"></div>`;
 
       // 幹（縦線）。自分の枝と、この行を通過する先祖の枝の両方を描く
       g.branches.forEach((b2, bi) => {
@@ -1685,7 +1692,8 @@
         // この行から始まる子の枝が新旧字体なら、そこへ降ろす区間も橙にする
         const child = g.branches.find(c => c.parent === bi && c.first === r.k);
         const kj = !!(child && child.kj);
-        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj || b2.deltaKj ? " kj" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
+        const rp = !!(child && child.rep);
+        if (to > from) h += `<div class="tree-bus t${b2.tier}${kj || b2.deltaKj ? " kj" : ""}${rp || b2.deltaRep ? " rep" : ""}" style="left:${b2.spineX}px;top:${from}px;height:${to - from}px"></div>`;
       });
 
       if (r.k === br.first) {
