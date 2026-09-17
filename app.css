@@ -1,0 +1,218 @@
+    body { font-family: "Noto Sans JP", sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; color: #333; background: #f9f9f9; }
+    h1 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+    
+    /* タブUI */
+    .tabs { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+    .tab-btn { background: none; border: none; padding: 10px 30px; font-size: 1.2rem; font-weight: bold; cursor: pointer; color: #7f8c8d; transition: 0.3s; }
+    .tab-btn:hover { color: #3498db; }
+    .tab-btn.active { color: #3498db; border-bottom: 4px solid #3498db; margin-bottom: -2px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* 検索コンテナ */
+    .search-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+    .clear-btn { padding: 10px 20px; font-size: 1rem; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .clear-btn:hover { background: #c0392b; }
+
+    /* 構成要素ごとの部首チップ。複数選べて、選んだぶんはANDで絞る（旁が刂で脚が心、のように引ける） */
+    .radical-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; width: 100%; }
+    .radical-group { border: 2px solid #ddd; border-radius: 6px; padding: 6px 8px 8px; transition: border-color 0.2s; }
+    .radical-group:has(input:checked) { border-color: #3498db; }
+    .radical-group legend { font-size: 0.85rem; font-weight: bold; color: #555; padding: 0 4px; }
+    /* グリフのみ表示（3行程度に収まる高さ）。読みは title属性のネイティブツールチップで表示 */
+    .chip-row { display: flex; flex-wrap: wrap; gap: 5px; max-height: 116px; overflow-y: auto; }
+    .radical-chip { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; font-family: "Noto Serif JP", serif; font-size: 1.15rem; }
+    .radical-chip:hover { background: #ebf5fb; }
+    /* 伝統的な部首名を持たない、IDSの分解から出ただけの構成部品。後ろに並べ、枠線だけ点線にする
+       （字まで薄くすると肝心のグリフが読みにくい） */
+    .radical-chip.sub { border-style: dashed; }
+    .radical-chip.sub:has(input:checked) { border-style: solid; }
+    .radical-chip:has(input:checked) { background: #3498db; color: #fff; border-color: #3498db; }
+    .radical-chip input { display: none; }
+
+    /* 漢字グリッド */
+    /* 水準の区切り。スクロールしても常に見えるようsticky固定し、下線を水準色に */
+    .level-separator { position: sticky; top: 0; z-index: 5; background: #f9f9f9; text-align: center; font-size: 1.4rem; font-weight: bold; padding: 14px 0 10px; margin: 30px 0 16px 0; color: #2c3e50; border-bottom: 3px solid #e5e5e5; }
+    .level-separator span { display: inline-block; position: relative; padding: 0 15px; }
+    .level-separator span::before, .level-separator span::after { content: ""; position: absolute; top: 50%; width: 100px; height: 2px; background-color: #bdc3c7; }
+    .level-separator span::before { right: 100%; margin-right: 15px; }
+    .level-separator span::after { left: 100%; margin-left: 15px; }
+    .level-separator.lvl1 span::before, .level-separator.lvl1 span::after { background-color: #3498db; }
+    .level-separator.lvl2 span::before, .level-separator.lvl2 span::after { background-color: #9b59b6; }
+    .level-separator.lvl3 span::before, .level-separator.lvl3 span::after { background-color: #e67e22; }
+    .level-separator.lvl4 span::before, .level-separator.lvl4 span::after { background-color: #e74c3c; }
+    .level-separator.lvl5 span::before, .level-separator.lvl5 span::after { background-color: #7f8c8d; }
+    /* JIS水準の並びとは別物なので、見出しを一段強く離す */
+    .level-separator.lvl5 { margin-top: 60px; border-top: 3px double #bdc3c7; padding-top: 22px; }
+    /* 記号や外字の2区分目以降は、前の区分に続くので強い区切りを外す */
+    .level-separator.lvl5.flat { margin-top: 0; border-top: none; padding-top: 0; }
+
+    /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
+       カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
+       ラベルの有無でカードがかさばったりガタついたりしない。
+       カードは5万枚を超える。全部DOMに置くと20万ノードになるので、グリッドは高さだけ持つ器にして
+       見えている行だけ実体化する（縮退ツリーのペインと同じ）。列の割り付けは JS 側が calc() で
+       書き込むので、列数が変わらない伸縮はブラウザ任せで追随する。 */
+    .grid { position: relative; margin-bottom: 6px; }
+    /* 絶対配置にするのは一覧のカードだけ。変体仮名の .card は通常のフローのまま */
+    .grid .card { position: absolute; box-sizing: border-box; }
+    .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 5px; text-align: center; cursor: pointer; position: relative; transition: transform 0.1s, box-shadow 0.1s; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); background: #ebf5fb; }
+    /* 区の切れ目を示すラベル。カードの外枠に重ねるだけでレイアウトの高さには影響しない */
+    .ku-tag { position: absolute; top: -8px; left: 4px; font-size: 0.6rem; line-height: 1; color: #999; background: #f9f9f9; padding: 0 3px; pointer-events: none; }
+    /* 漢字カードは水準ごとに上端4pxだけ色を付ける(点数バッジの代わり) */
+    .card.lvl1 { border-top: 4px solid #3498db; } .card.lvl2 { border-top: 4px solid #9b59b6; }
+    .card.lvl3 { border-top: 4px solid #e67e22; } .card.lvl4 { border-top: 4px solid #e74c3c; }
+    /* 外字（縮退先が定義されていないMJ字形）。IVSを効かせたいのでIPAmj明朝で描く */
+    .card.lvl5 { border-top: 4px solid #7f8c8d; }
+    .card.lvl5 .char-main { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; }
+    /* IPAmj明朝バッジをOFFにした時。字形描画をその場で切り替えるためのクラス */
+    body.no-mjfont .card.lvl5 .char-main, body.no-mjfont .tree-node .g { font-family: "Noto Serif JP", serif; }
+    /* tokenizer.json の語彙に入っている字の印。カード全体の説明(title)とは別に、
+       丸そのものに説明を持たせたいので擬似要素ではなく実体の span で描く。
+       当たり判定を9pxに広げ、見た目の丸(5px)は背景のグラデーションで中心に置く */
+    .tok-dot { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%;
+               background: radial-gradient(circle, #16a085 0 2.5px, transparent 2.5px); }
+
+    .char-main { font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 2rem; font-weight: 500; display: block; margin-bottom: 5px; line-height: 1.2; }
+    
+    /* 変体仮名用スタイル */
+    .kana-line { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+    .kana-label { flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-family: "Noto Serif Hentaigana", "Noto Serif JP", serif; font-size: 1.6rem; background: #eef6fc; color: #2c3e50; border-radius: 6px; }
+    .kana-line .hentai-grid { flex: 1; }
+    .hentai-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    /* くの字点は上半分と下半分の2字で1つの記号になる縦書き用。横に並べると形にならないので縦に組む */
+    .card.kana-vert .char-main { writing-mode: vertical-rl; line-height: 1; margin: 0 auto 5px; }
+    .hentai-meta { font-size: 0.75rem; color: #666; display: flex; flex-direction: column; gap: 2px; }
+    .hentai-meta span { background: #eee; padding: 2px 5px; border-radius: 3px; }
+
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 20px; display: none; z-index: 1000; font-size: 0.9rem; }
+    .empty-msg { text-align: center; color: #999; padding: 10px; font-size: 1.1rem; grid-column: 1 / -1; }
+
+    /* ================= 縮退ツリー窓 ================= */
+    /* ツリーOFFのときはページスクロールのまま＝従来の index.html と同じ挙動。
+       ONのときだけ一覧を独立したスクロールコンテナにしてツリーと縦位置を同期させる。 */
+    .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    .bar-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .bar-label { font-weight: bold; color: #95a5a6; font-size: 0.72rem; letter-spacing: 1px; }
+    /* 移動・絞り込み・検索は「ラベル | 中身」の2列グリッドに揃える。
+       ラベル幅を固定しないと行ごとに中身の左端がずれ、右端も揃わない。 */
+    /* ラベル列は一番長い「絞り込み」(0.72rem・字間1px)がちょうど収まる幅にする。
+       各行が別のグリッドなので auto にすると行ごとに幅が変わり、中身の左端が揃わない。 */
+    .find-row { display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: center; width: 100%; }
+    .find-row > .row-body { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+    .find-row input[type="text"] { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; font-size: 0.95rem; }
+    .find-row input[type="text"]:focus { outline: none; border-color: #3498db; }
+    .find-row .status { grid-column: 2; color: #7f8c8d; font-size: 0.8rem; min-height: 1em; }
+    /* 検索はラベルを placeholder に畳んだので、1列にして容器の幅いっぱいまで広げる */
+    #searchRow { grid-template-columns: 1fr; }
+    #searchRow .status { grid-column: 1; }
+    /* 一覧の見出しへ飛ぶチップ。54,402枚をスクロールで辿らずに済ませる */
+    .jump-row .row-body { gap: 6px; }
+    .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
+    .jump-chip:not(:disabled):hover { background: #f4f9fd; border-color: currentColor; }
+    .jump-chip:disabled { color: #b2bec3; cursor: default; }
+    .jump-chip .n { color: #b2bec3; font-weight: normal; margin-left: 4px; }
+    .legend { flex-basis: 100%; font-size: 0.7rem; color: #95a5a6; border-top: 1px solid #f0f0f0; padding-top: 7px; }
+    .legend a { color: #95a5a6; }
+    .legend b { color: #7f8c8d; }
+    .legend b.kj { color: #e67e22; }
+    .legend .credit { color: #bdc3c7; }
+    /* 根拠は6つ並ぶので、チェック箱のぶんの幅を切ってトグルチップにする。
+       input は消さずに透明で置いておく（キーボードで辿れて :has(:checked) も効く）。
+       同じ出典から来る根拠は「戸籍」の箱にまとめ、頭の「戸籍」を3回書かずに済ませる。 */
+    .src-group { display: inline-flex; align-items: center; gap: 4px; padding: 2px 5px; border: 1px solid #e4e4e4; border-radius: 6px; }
+    .src-chip { position: relative; padding: 4px 9px; border: 1px solid #ccc; border-radius: 5px; background: #fff;
+                cursor: pointer; user-select: none; font-size: 0.75rem; font-weight: bold; color: #7f8c8d; }
+    .src-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .src-chip:hover { background: #ebf5fb; }
+    .src-chip:has(input:checked) { background: #3498db; border-color: #3498db; color: #fff; }
+    .src-chip:has(input:focus-visible) { outline: 2px solid #2980b9; outline-offset: 1px; }
+    #srcSwitches { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+    .font-status-btn { padding: 5px 10px; border-radius: 5px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: 0.78rem; }
+    /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
+    .file-btn { padding: 5px 12px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer; font-size: 0.78rem; font-weight: bold; color: #7f8c8d; }
+    .file-btn:hover { background: #ebf5fb; border-color: #3498db; color: #2980b9; }
+    /* データを読めているかどうかは丸の色で示す。どこから読んだかは title に回す */
+    .file-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #dfe4e6; margin-right: 6px; vertical-align: 1px; }
+    .file-btn.ready .dot { background: #27ae60; }
+
+    /* appearance: base-select にすると候補リストが ::picker(select) として CSS の対象になり、
+       max-height で行数を抑えられる（OS描画のままだと高さは指定できない）。
+       対応していないブラウザはこの宣言を捨ててネイティブ描画に落ちるだけで、動作は変わらない。
+       キー操作・タイプアヘッド・支援技術は <select> のものをそのまま使う。 */
+    select.sel, select.sel::picker(select) { appearance: base-select; }
+    select.sel { padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: pointer;
+                 font-family: inherit; font-size: 0.78rem; font-weight: bold; color: #2c3e50; }
+    select.sel:hover, select.sel:open { border-color: #3498db; }
+    select.sel::picker(select) { max-height: 16em; overflow-y: auto; margin-top: 3px; padding: 4px;
+                                 border: 1px solid #d5dbdb; border-radius: 6px; background: #fff;
+                                 box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+    select.sel optgroup { padding: 6px 8px 2px; font-size: 0.68rem; font-weight: bold; color: #95a5a6; letter-spacing: 1px; }
+    select.sel option { padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-weight: normal; color: #2c3e50; }
+    select.sel option:hover { background: #ebf5fb; }
+    select.sel option:checked { background: #3498db; color: #fff; font-weight: bold; }
+    select.sel option::checkmark { display: none; }
+
+    .status-active { background: #e6f4ea; color: #137333; border-color: #ceead6; }
+    .status-inactive { background: #feefae; color: #b06000; border-color: #fdd663; }
+    /* 「ツリー ON」だと今の状態か押した結果か読めないので、素直にチェックボックスにする */
+    .switch { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 9px; border: 1px solid #ccc; border-radius: 5px; cursor: pointer; user-select: none; }
+    .switch input { width: 15px; height: 15px; accent-color: #3498db; cursor: pointer; margin: 0; }
+    .switch:hover { background: #ebf5fb; }
+    .switch:has(input:checked) { background: #ebf5fb; border-color: #3498db; color: #2980b9; font-weight: bold; }
+    .switch:has(input:disabled) { color: #bdc3c7; border-color: #e4e4e4; cursor: default; background: none; }
+
+    #kanjiPanes { display: flex; gap: 12px; align-items: stretch; }
+    #kanjiContainer { flex: 1; min-width: 0; }
+    #treePane { display: none; flex: 0 0 470px; overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; }
+
+    /* ツリーONのときは2つのペインを sticky で画面いっぱいに貼り付ける。
+       ページ自体は普通にスクロールし、ヘッダと部首フィルタは上へ流れて消える。
+       そのぶんペインは常に画面の高さいっぱいを使える。 */
+    body.tree-on #kanjiPanes { position: sticky; top: 8px; height: calc(100vh - 16px); }
+    /* ツリーONのときに縮めるのは部首のグリッドだけ。容器ごと縮めると、
+       グリッドの下に置いた検索欄とCLEARがスクロールの外へ隠れてしまう */
+    body.tree-on .radical-grid { max-height: 28vh; overflow-y: auto; }
+    /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
+    body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
+    /* 変体仮名も同じように貼り付ける。ページごと流すと五十音10段で5千px超になり、
+       上に置いた「移動」の札まで戻れなくなる。 */
+    #hentaiganaContainer { position: sticky; top: 8px; height: calc(100vh - 16px); overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
+    body.tree-on #treePane { display: block; }
+    /* ツリーだけ表示。ツリーの幅は5列ぶんで決まっているので、空いた幅は左右に振って中央に置く */
+    body.list-off #kanjiContainer { display: none; }
+    body.list-off #kanjiPanes { justify-content: center; }
+
+    .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 0.68rem; color: #7f8c8d; }
+    .tree-head div { text-align: center; padding: 6px 0; }
+    .tree-head div.foc { color: #2c3e50; background: #ebf5fb; font-weight: bold; }
+    #treeBody { position: relative; }
+    .tree-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid #f4f4f4; }
+    .tree-row.on { background: #ebf5fb; }
+    .tree-line { position: absolute; height: 1px; background: #cfd8dc; }
+    /* 縮退先ごとの縦バス。交点の点が打たれた行だけがその字に繋がっている */
+    .tree-bus { position: absolute; width: 1px; margin-left: -1px; background: #dfe6e9; }
+    /* 根拠の段を線種で示す。実線=規格の包摂・統合、破線=法令の読み替え、点線=辞書・類推 */
+    .tree-line.t1 { height: 0; background: none; border-top: 1px dashed #b0bec5; }
+    .tree-line.t2 { height: 0; background: none; border-top: 1px dotted #90a4ae; }
+    /* 常用漢字表の新旧字体。破線だと埋もれるので、橙の実線で描く（縦の幹も同じ） */
+    .tree-line.kj { height: 1px; border-top: none; background: #e67e22; }
+    .tree-bus.kj { width: 1px; border-left: none; background: #e67e22; }
+    /* JIS例示字形。その面区点の字そのものを表す1:1の線なので、縮退と区別して青の実線で描く */
+    .tree-line.rep { height: 1px; border-top: none; background: #3498db; }
+    .tree-bus.rep { width: 1px; border-left: none; background: #3498db; }
+    .tree-bus.t1 { width: 0; background: none; border-left: 1px dashed #cfd8dc; }
+    .tree-bus.t2 { width: 0; background: none; border-left: 1px dotted #b0bec5; }
+    .tree-box { position: absolute; border: 1px solid #cfd8dc; border-radius: 5px; background: rgba(255,255,255,.5); }
+    .tree-row.grp { border-top: 2px solid #e6ecf0; }
+    .tree-node .m[data-copy] { cursor: pointer; }
+    .tree-node .m[data-copy]:hover { color: #3498db; text-decoration: underline; }
+    .tree-node { position: absolute; width: 90px; margin-left: -45px; text-align: center; }
+    .tree-node .g { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; font-size: 1.3rem; line-height: 1.15; display: block; cursor: pointer; }
+    .tree-node .m { font-size: 0.55rem; color: #aaa; display: block; line-height: 1.1; white-space: nowrap; }
+    .tree-node.hit .g { border-radius: 3px; }
+    /* 右クリックで飛んだ先を1秒だけ水準色のリングで示す */
+    .card.flash { box-shadow: 0 0 0 3px var(--flash); background: #fffdf0; }
+    .tree-empty { padding: 20px; color: #999; font-size: 0.85rem; text-align: center; }
