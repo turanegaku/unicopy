@@ -179,6 +179,9 @@
     body.tree-on .radical-grid { max-height: 28vh; overflow-y: auto; }
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
+    /* 変体仮名も同じように貼り付ける。ページごと流すと五十音10段で5千px超になり、
+       上に置いた「移動」の札まで戻れなくなる。 */
+    #hentaiganaContainer { position: sticky; top: 8px; height: calc(100vh - 16px); overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
     /* ツリーだけ表示。ツリーの幅は5列ぶんで決まっているので、空いた幅は左右に振って中央に置く */
     body.list-off #kanjiContainer { display: none; }
@@ -266,6 +269,12 @@
 
   <!-- ================= 変体仮名モード ================= -->
   <div id="hentaigana" class="tab-content">
+    <div class="search-container">
+      <div class="find-row jump-row">
+        <span class="bar-label">移動</span>
+        <span class="row-body" id="kanaJump"></span>
+      </div>
+    </div>
     <div id="hentaiganaContainer"></div>
   </div>
 
@@ -931,6 +940,7 @@
       container.innerHTML = '';
 
       let total = 0;
+      const jumps = []; // 移動チップの元。見出しと、そこにぶら下がる枚数
       // 繰り返し記号（踊り字）。五十音の行には属さないので先頭に1行だけ置く
       const repeatSep = document.createElement('div');
       repeatSep.className = 'level-separator';
@@ -953,6 +963,7 @@
       });
       container.appendChild(repeatGrid);
       total += KANA_REPEATS.length;
+      jumps.push({ sep: repeatSep, label: '繰り返し記号', n: KANA_REPEATS.length });
 
       GOJUON_ROWS.forEach(row => {
         const baseItems = row.bases.map(base => HENTAIGANA_DATA.filter(d => d.base === base));
@@ -964,6 +975,7 @@
         sep.className = 'level-separator';
         sep.innerHTML = `<span>${row.label}</span>`;
         container.appendChild(sep);
+        jumps.push({ sep, label: row.label, n: rowTotal });
 
         row.bases.forEach((base, i) => {
           const items = baseItems[i];
@@ -997,6 +1009,26 @@
       });
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する変体仮名が見つかりませんでした。</div>';
+      buildKanaJump(jumps);
+    }
+
+    /* ---- 見出しへ飛ぶチップ（変体仮名モード） ----
+       五十音が10段あり、下の行はスクロールしないと辿り着けないので漢字モードと同じ札を出す。
+       一覧は漢字モードのペインと同じく画面に貼り付けてあるので、送るのはその中だけ。
+       見出しは sticky で上端に貼り付き位置の基準にならないため、次に来る中身から測る。 */
+    function buildKanaJump(jumps) {
+      const bar = document.getElementById('kanaJump');
+      bar.innerHTML = '';
+      jumps.forEach(j => {
+        const b = document.createElement('button');
+        b.className = 'jump-chip';
+        b.innerHTML = `${j.label}<span class="n">${j.n.toLocaleString()}</span>`;
+        b.onclick = () => {
+          const pane = document.getElementById('hentaiganaContainer');
+          pane.scrollTop = paneTop(j.sep.nextElementSibling || j.sep, pane) - (j.sep.offsetHeight + 8);
+        };
+        bar.appendChild(b);
+      });
     }
 
     /* =====================================================================
