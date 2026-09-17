@@ -131,9 +131,13 @@ def split_args(s):
     return op, out
 
 
-def components(ids, ch):
+def components(ids, ch, deep=True):
     """その字の {位置: {部品,...}}。引数が部分木なら中の葉を全部その位置の部品とする。
-    愛(⿱⿱爫冖𢖻) のかんむり側は ⿱爫冖 なので 爫 と 冖 の両方に入れる（どちらも実際に上にある）。"""
+    愛(⿱⿱爫冖𢖻) のかんむり側は ⿱爫冖 なので 爫 と 冖 の両方に入れる（どちらも実際に上にある）。
+
+    部品そのものが同じ向きの枠になっているときは、その内側の部品でも引けるようにする。
+    同(⿵𠔼口) の枠は 𠔼(⿵冂一) で、𠔼 を部品とする字は同を入れて2字しかない。
+    人が探すのは どうがまえ(冂) なので、一段だけ下を見て 冂 からも当たるようにする。"""
     op, args = split_args(ids.get(ch, ''))
     if op is None:
         return {}
@@ -142,7 +146,11 @@ def components(ids, ch):
         if op not in ops:
             continue
         part = args[k]
-        out[pos] = {part} if len(part) == 1 else {c for c in part if c not in OPS}
+        cs = {part} if len(part) == 1 else {c for c in part if c not in OPS}
+        if deep:
+            for c in list(cs):
+                cs |= components(ids, c, deep=False).get(pos, set())
+        out[pos] = cs
     return out
 
 
