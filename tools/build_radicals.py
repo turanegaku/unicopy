@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""IDS(漢字構成記述列) から部首フィルタの索引を作り、index.html と mjmap.json へ書き戻す。
+"""IDS(漢字構成記述列) から部首フィルタの索引を作り、app.js と mjmap.json へ書き戻す。
 
-  python3 tools/build-radicals.py ids.txt --html index.html --mjmap mjmap.json
+  python3 tools/build_radicals.py ids.txt --html app.js --mjmap mjmap.json
 
 ids.txt は CHISE IDS Database / CJKVI IDS。`U+XXXX <tab> 字 <tab> IDS [<tab> 地域別異体[GTJKV]]`。
 標準ライブラリのみで読む。ソースデータはリポジトリに入れず引数で渡す（build-mjmap.py と同じ）。
@@ -224,7 +224,8 @@ def build(ids, jis_chars, gaiji_chars):
 
     # 伝統的な呼び名のある組は字数に関わらず前へ。残りはIDSから出ただけの構成部品として後ろへ
     def rank(pos, c):
-        return (0 if (pos, c) in real else 1, -len(idx[pos][c]))
+        # 部品そのものを末尾に入れて、同数のときの並びを走らせるたびに変えない（set の順は毎回違う）
+        return (0 if (pos, c) in real else 1, -len(idx[pos][c]), c)
     chips = {pos: sorted((c for c, v in idx[pos].items()
                           if (pos, c) in real or len(v) >= MIN_ANY
                           or (c in kangxi and len(v) >= MIN_KANGXI)),
@@ -245,7 +246,7 @@ def build(ids, jis_chars, gaiji_chars):
     table = {pos: {c: ''.join(sorted(idx[pos][c])) for c in cs if idx[pos][c]}
              for pos, cs in chips.items() if cs}
 
-    # 外字は mjmap.json 側に置く。inline に足すと index.html が155KB膨らむ
+    # 外字は mjmap.json 側に置く。inline に足すと app.js が155KB膨らむ
     gai = collections.defaultdict(lambda: collections.defaultdict(list))
     for ch in gaiji_chars:
         for pos, cs in components(ids, ch).items():
@@ -270,7 +271,7 @@ def js_block(table, readings, n_real):
                 for k, v in d.items()]
         return '{\n' + '\n'.join(rows) + '\n' + pad + '}'
     out = [MARK_BEGIN,
-           '    /* 部首データ。tools/build-radicals.py が IDS(CHISE IDS Database / CJKVI IDS) から作る。',
+           '    /* 部首データ。tools/build_radicals.py が IDS(CHISE IDS Database / CJKVI IDS) から作る。',
            '       位置 -> 部品 -> その位置にその部品を持つ第1〜4水準の字。部品は IDS が返す位置別の字体',
            '       （亻 氵 扌 忄 灬 衤 …）なので、チップはこのキーをそのまま1文字出すだけでよい。',
            '       MJ外字ぶんは量が多いので mjmap.json の radicals に置いてある。 */',
@@ -289,43 +290,49 @@ def js_block(table, readings, n_real):
     return '\n'.join(out)
 
 
-def main():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('ids', help='IDSファイル (ids.txt)')
-    p.add_argument('--html', default='index.html')
-    p.add_argument('--mjmap', default='mjmap.json')
-    a = p.parse_args()
-
-    ids = read_ids(a.ids)
-    with open(a.mjmap, encoding='utf-8') as f:
-        mm = json.load(f)
+def apply(ids_path, html_path, mm):
+    """mm（mjmap.json の中身）の字を対象に索引を作り、水準字ぶんを html_path の
+    radicals ブロックへ書き戻し、外字ぶんを mm['radicals'] に入れる。統計を stderr に出す。"""
+    ids = read_ids(ids_path)
     # 対象字は mjmap.json から取る。jis は面区点を持つ10,054字で、記号を除くと第1〜4水準になる
     jis_chars = sorted({c for _, c in mm['jis'] if c not in SYMBOLS})
     gaiji_chars = sorted({m[1][0] for m in mm['mj'] if m[1]} - set(jis_chars) - SYMBOLS)
     table, gaiji, readings, n_real, compound, selfref = build(ids, jis_chars, gaiji_chars)
 
-    html = open(a.html, encoding='utf-8').read()
+    html = open(html_path, encoding='utf-8').read()
     block = js_block(table, readings, n_real)
     i, j = html.index(MARK_BEGIN), html.index(MARK_END) + len(MARK_END)
-    open(a.html, 'w', encoding='utf-8').write(html[:i] + block.lstrip() + html[j:])
+    open(html_path, 'w', encoding='utf-8').write(html[:i] + block.lstrip() + html[j:])
     mm['radicals'] = gaiji
-    with open(a.mjmap, 'w', encoding='utf-8') as f:
-        json.dump(mm, f, ensure_ascii=False, separators=(',', ':'))
 
     chips = sum(len(d) for d in table.values())
     named = sum(len(d) for d in readings.values())
     nreal = sum(n_real.values())
     cov = len({c for d in table.values() for v in d.values() for c in v})
     gcov = len({c for d in gaiji.values() for v in d.values() for c in v})
-    print(f'{a.html}: チップ {chips}（伝統部首 {nreal} / IDSのみ {chips - nreal}・読みあり {named}）'
+    print(f'{html_path}: チップ {chips}（伝統部首 {nreal} / IDSのみ {chips - nreal}・読みあり {named}）'
           f' / 水準 {cov:,}/{len(jis_chars):,}字'
           f' / 複合引数 {compound}箇所を展開 / 原子字の自己登録 {selfref}\n'
-          f'{a.mjmap}: 外字 {gcov:,}/{len(gaiji_chars):,}字', file=sys.stderr)
+          f'外字 {gcov:,}/{len(gaiji_chars):,}字', file=sys.stderr)
     for pos in POS:
         d = table.get(pos, {})
         print(f'  {pos}: {len(d)}種（伝統 {n_real.get(pos, 0)}） / のべ {sum(len(v) for v in d.values()):,}字'
               f' … {" ".join(f"{c}{len(v)}" for c, v in list(d.items())[:8])}', file=sys.stderr)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('ids', help='IDSファイル (ids.txt)')
+    p.add_argument('--html', default='app.js')
+    p.add_argument('--mjmap', default='mjmap.json')
+    a = p.parse_args()
+
+    with open(a.mjmap, encoding='utf-8') as f:
+        mm = json.load(f)
+    apply(a.ids, a.html, mm)
+    with open(a.mjmap, 'w', encoding='utf-8') as f:
+        json.dump(mm, f, ensure_ascii=False, separators=(',', ':'))
 
 
 if __name__ == '__main__':
