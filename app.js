@@ -1351,11 +1351,15 @@
           const base = bi === 0 ? 0 : branches[br.parent].bits;
           br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)) && !drawn.has(t.idx));
           br.delta.forEach(t => drawn.add(t.idx));
-          // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
-          br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
-          br.deltaKj = br.delta.some(t => (tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0) === br.tier
-                                          && kjEdge.has(mjs[br.first] + ":" + t.idx));
-          br.deltaRep = br.delta.some(t => repEdge.has(mjs[br.first] + ":" + t.idx));
+          // 枝の幹は、その枝にぶら下がる全行の、枝が増やす縮退先へのエッジのうち一番弱い根拠で描く。
+          // 先頭行だけで決めると、誤字俗字だけ ON のとき 邊 の枝の幹が先頭の正字 邊󠄈 の青い実線に
+          // なり、破線でぶら下がる誤字たちまで規格で繋がっているように見える。
+          // 正字の青は、枝の全行が正字のときだけ（1:1 の対応しか無い枝）。
+          const rows = []; for (let k = br.first; k <= br.last; k++) rows.push(mjs[k]);
+          const key = (m, t) => m + ":" + t.idx;
+          br.tier = Math.max(0, ...rows.flatMap(m => br.delta.map(t => tierOfEdge.get(key(m, t)) || 0)));
+          br.deltaKj = rows.some(m => br.delta.some(t => (tierOfEdge.get(key(m, t)) || 0) === br.tier && kjEdge.has(key(m, t))));
+          br.deltaRep = rows.every(m => br.delta.some(t => repEdge.has(key(m, t))));
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
           const up = targets.filter(t => (base & (1 << t.idx)));
           br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
