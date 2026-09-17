@@ -970,7 +970,9 @@
     const treeWasOpen = () => { try { return localStorage.getItem(TREE_PREF) === "1"; } catch { return false; } };
     const saveTreeOpen = on => { try { localStorage.setItem(TREE_PREF, on ? "1" : "0"); } catch { } };
 
-    // ---- IndexedDB（mjmap.json は 4〜5MB あり localStorage には入らない） ----
+    // http(s) で配信されているか。file:// で開いたときだけ IndexedDB を使う
+    const SERVED = /^https?:$/.test(location.protocol);
+    // ---- IndexedDB（mjmap.json は 4〜5MB あり localStorage には入らない。file:// 用） ----
     function idb(mode, fn) {
       return new Promise((res, rej) => {
         const rq = indexedDB.open("unicopy", 1);
@@ -1143,7 +1145,8 @@
       r.onload = ev => {
         try {
           loadMjmap(ev.target.result, "file");
-          idb("readwrite", s => s.put(ev.target.result, "mjmap")).catch(() => {});
+          // 保存するのは file:// のときだけ。http(s) では次回も同じ場所の mjmap.json を取るので残しても使わない
+          if (!SERVED) idb("readwrite", s => s.put(ev.target.result, "mjmap")).catch(() => {});
         } catch (err) {
           setDataState(false, "読み込みに失敗: " + err.message);
         }
@@ -1987,17 +1990,17 @@
       renderHentaigana();
       checkIPAmjFont();
       wireSync();
-      // 前回読ませた mjmap.json が残っていればファイル選択なしで復元する。
-      // 無ければ同じ場所に置かれた mjmap.json を取りに行く。
-      // file:// のページはオリジンを持たない扱いなので、同じフォルダに置いてあっても
-      // fetch は止められ、IndexedDB も http:// で保存したぶんは見えない。
-      // 黙って未読込のままにすると理由が分からないので、その場合は手動選択を促す。
-      idb('readonly', s => s.get('mjmap'))
-        .then(t => t ? { t, src: 'idb' } : fetch('mjmap.json').then(r => r.ok ? r.text() : null).then(t => t && { t, src: 'fetch' }))
+      // http(s) で配信されているときは同じ場所の mjmap.json を毎回取る（GitHub Pages がこれ）。
+      // 手元に保存すると、mjmap.json を作り直しても古いデータのまま描かれ、根拠の表示と合わなくなる。
+      // file:// のページはオリジンを持たない扱いなので、同じフォルダに置いてあっても fetch は
+      // 止められる。そのときだけ、前回ファイル選択で読ませたぶんを IndexedDB から復元する。
+      // 黙って未読込のままにすると理由が分からないので、無ければ手動選択を促す。
+      (SERVED ? fetch('mjmap.json', { cache: 'no-cache' }).then(r => r.ok ? r.text() : null).then(t => t && { t, src: 'fetch' })
+              : idb('readonly', s => s.get('mjmap')).then(t => t && { t, src: 'idb' }))
         .catch(() => null)
         .then(r => {
           if (r) return loadMjmap(r.t, r.src);
-          const why = /^https?:$/.test(location.protocol)
+          const why = SERVED
             ? 'mjmap.json が見つかりません'
             : `${location.protocol}// で開いているため mjmap.json を自動で読めません`;
           setDataState(false, why + '。クリックして mjmap.json を選んでください');
