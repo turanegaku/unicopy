@@ -946,8 +946,11 @@
       { id: "srcJis",    label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
       { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（364組）" },
       { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
-      { id: "srcGoji",   label: "誤字俗字",   tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
-      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "srcZoku",   label: "俗字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち俗字（233本）と、同日の民二5202号通知別表 正字・俗字等対照表（138本）。漢和辞典に俗字として載る同字の異体で、戸籍にそのまま残せる" },
+      // 5202号の対照表は同日の依命通知の別表で、138本のうち120本は上の俗字と重なる。俗字のチップに畳む
+      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, group: "戸籍", chip: "srcZoku", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "srcGoji",   label: "誤字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち無印＝誤字。辞書に無い誤った字体で、職権で正字に訂正される（618本）" },
+      { id: "srcBetsu",  label: "別字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち別字。正字とは別の字だが混用されているもので、申出で正字に訂正できる（150本）" },
       { id: "src582",    label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等に係る漢字氏名の表記（12,568本）" },
       // 辞書・類推は縮退の根拠としては弱すぎて常用しないので、データには持つがチップは出さない
       { id: "srcDict",   label: "辞書",       tier: 2, on: false, hidden: true, title: "辞書類等による関連字（15,958本）" },
@@ -1107,18 +1110,20 @@
       }));
     }
 
-    // 続きのグループは1つの箱にまとめて、頭に出典名を1回だけ書く
+    // 続きのグループは1つの箱にまとめて、頭に出典名を1回だけ書く。
+    // 他のチップに畳んだ根拠（chip）はチップを持たず、そのチップの on/off に従う
+    const noChip = s => s.hidden || s.chip;
     el("srcSwitches").innerHTML = SRC.reduce((h, s, i) => {
-      if (s.hidden) return h;
-      const prev = SRC[i - 1];
-      if (s.group !== (prev && !prev.hidden ? prev.group : undefined)) {
+      if (noChip(s)) return h;
+      const prev = SRC.slice(0, i).reverse().find(x => !noChip(x));
+      if (s.group !== (prev ? prev.group : undefined)) {
         if (prev && prev.group) h += "</span>";
         if (s.group) h += `<span class="src-group"><span class="bar-label">${s.group}</span>`;
       }
       return h + `<label class="src-chip" title="${s.title}"><input type="checkbox" id="${s.id}"${s.on ? " checked" : ""}>${s.label}</label>`;
-    }, "") + (SRC.filter(s => !s.hidden).pop().group ? "</span>" : "");
-    SRC.filter(s => !s.hidden).forEach(s => el(s.id).addEventListener("change", e => {
-      s.on = e.target.checked;
+    }, "") + (SRC.filter(s => !noChip(s)).pop().group ? "</span>" : "");
+    SRC.filter(s => !noChip(s)).forEach(s => el(s.id).addEventListener("change", e => {
+      SRC.forEach(x => { if (x === s || x.chip === s.id) x.on = e.target.checked; });
       if (mjmap) { buildEdges(); renderKanji(); fillGaijiBlocks(); }
     }));
 
