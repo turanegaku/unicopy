@@ -192,6 +192,8 @@
     .tree-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid #f4f4f4; }
     .tree-row.on { background: #ebf5fb; }
     .tree-line { position: absolute; height: 1px; background: #cfd8dc; }
+    /* 1px の線には乗れないので、tooltip のために上下左右 4px を当たり判定にする */
+    .tree-line::after, .tree-bus::after { content: ""; position: absolute; top: -4px; bottom: -4px; left: -4px; right: -4px; }
     /* 縮退先ごとの縦バス。交点の点が打たれた行だけがその字に繋がっている */
     .tree-bus { position: absolute; width: 1px; margin-left: -1px; background: #dfe6e9; }
     /* 根拠の段を線種で示す。実線=規格の包摂・統合、破線=法令の読み替え、点線=辞書・類推 */
