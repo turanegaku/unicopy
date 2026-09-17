@@ -117,7 +117,8 @@
     /* 一覧の見出しへ飛ぶチップ。54,402枚をスクロールで辿らずに済ませる */
     .jump-row .row-body { gap: 6px; }
     .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
-    .jump-chip:hover { background: #f4f9fd; border-color: currentColor; }
+    .jump-chip:not(:disabled):hover { background: #f4f9fd; border-color: currentColor; }
+    .jump-chip:disabled { color: #b2bec3; cursor: default; }
     .jump-chip .n { color: #b2bec3; font-weight: normal; margin-left: 4px; }
     .legend { flex-basis: 100%; font-size: 0.7rem; color: #95a5a6; border-top: 1px solid #f0f0f0; padding-top: 7px; }
     .legend a { color: #95a5a6; }
@@ -1028,6 +1029,15 @@
     function buildSectionJump() {
       const bar = document.getElementById('sectionJump');
       bar.innerHTML = '';
+      // 該当0件でも札を1枚置いて行の高さを保つ。空にすると行が潰れ、下の一覧ごとせり上がる
+      if (!sections.length) {
+        const b = document.createElement('button');
+        b.className = 'jump-chip';
+        b.disabled = true;
+        b.textContent = '該当なし';
+        bar.appendChild(b);
+        return;
+      }
       sections.forEach(s => {
         const b = document.createElement('button');
         b.className = 'jump-chip';
