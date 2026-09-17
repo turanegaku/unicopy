@@ -714,8 +714,10 @@
         addSection(container, `lvl${level}`, `第${level}水準`, items.length, base);
       });
 
-      // 外字は面区点を持たないので、面区点で絞っているときは出さない
-      if (!kuOk) total += renderGaiji(container, targetChars, blk);
+      // 外字は面区点を持たないので、面区点で絞っているときは出さない。
+      // 縮退先も持たないので、「縮退があるものだけ」のときも出さない。基底の字が縮退に関わっている
+      // だけで通すと、俗字だけ ON でも外字が100枚ついてきて、縮退のある字の数に見えてしまう
+      if (!kuOk && !el('onlyShrink').checked) total += renderGaiji(container, targetChars, blk);
 
       if (total === 0) { container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>'; sections = []; }
       relayout();        // 高さを入れて位置を測り直し、見えている窓だけ描く
@@ -917,7 +919,7 @@
     let useIPAmj = false;       // 字形の描画にIPAmj明朝を使うか（バッジで切り替える）
     const charLevel = new Map();  // 文字 -> 水準。一覧の生成結果がそのまま正解なので流用する
     const mjByChar = new Map();   // 文字 -> [MJ index]（その字を実装する／その字へ縮退する）
-    const shrinkChars = new Set();// いま選んでいる根拠で縮退に関わる字（縮退元の字形／縮退先の両方）
+    const shrinkChars = new Set();// いま選んでいる根拠で縮退に関わる字（ツリーに縮退の行が出る字）
     const candByMj = new Map();   // MJ index -> [面区点の添字]
     const mjIndex = new Map();    // "MJ000089" -> index
     const jisChar = new Map();    // "1-18-81" -> "会"
@@ -1095,19 +1097,21 @@
           if (e.kt == null || t < e.kt) e.kt = t;
         })));
       }
-      edges.forEach((es, mi) => es.forEach(({ on, bits, kt }, ji) => {
-        // 直接のエッジと派生した新旧字体のうち強いほうの段。正字だけのエッジ（on=0）は元のビットで
-        let tier = on ? tierOf(on) : kt == null ? tierOf(bits) : 9;
-        let kj = !!((on || bits) & BIT_KYUUJITAI);
-        if (kt != null && kt <= tier) { tier = kt; kj = kt === 0; }
-        push(candByMj, mi, [ji, tier, kj, !!(bits & BIT_REP)]);
-        push(mjByChar, jisCh[ji], mi);
-        // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
-        if (on || kt != null) {
-          shrinkChars.add(jisCh[ji]);
-          if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
-        }
-      }));
+      edges.forEach((es, mi) => {
+        es.forEach(({ on, bits, kt }, ji) => {
+          // 直接のエッジと派生した新旧字体のうち強いほうの段。正字だけのエッジ（on=0）は元のビットで
+          let tier = on ? tierOf(on) : kt == null ? tierOf(bits) : 9;
+          let kj = !!((on || bits) & BIT_KYUUJITAI);
+          if (kt != null && kt <= tier) { tier = kt; kj = kt === 0; }
+          push(candByMj, mi, [ji, tier, kj, !!(bits & BIT_REP)]);
+          push(mjByChar, jisCh[ji], mi);
+        });
+        /* 絞り込みの「縮退があるものだけ」で使う。いま選んでいる根拠のエッジを1本でも持つMJが
+           ツリーでぶら下がる字（縮退先と、そのMJが正字になっている面区点）を数える。
+           MJの基底の字は数えない。俗字だけ ON のとき 凖 のある字形が 準 へ縮退していても、
+           その字形が 凖 の正字でなければ 凖 の下には何も出ないので、一覧に出しても空振りになる。 */
+        if ([...es.values()].some(e => e.on || e.kt != null)) es.forEach((e, ji) => shrinkChars.add(jisCh[ji]));
+      });
     }
 
     // 続きのグループは1つの箱にまとめて、頭に出典名を1回だけ書く。
