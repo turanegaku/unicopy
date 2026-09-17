@@ -943,6 +943,7 @@
       const container = document.getElementById('kanjiContainer');
       container.innerHTML = '';
       listOrder = []; sections = [];
+      directHits = new Set(); shrinkPulled = new Set();
 
       let targetChars = null; // null = すべて
       // 部首は複数選べる。選んだぶんはANDで重ねる（人名用漢字や検索と同じ畳み方）
@@ -1020,6 +1021,8 @@
        終着点の 国 を一覧に入れれば 国 の群が出て、國 はその枝として下がる。
        その字を字形として持つMJ（基底が一致するMJ）だけを辿るので、
        たまたま同じ縮退先を持つだけの字までは引き込まない。 */
+    let directHits = new Set();   // フィルタに直接当たった字
+    let shrinkPulled = new Set(); // 縮退先として引き込んだだけの字
     function withShrinkTargets(chars) {
       if (!mjmap) return chars;
       const out = new Set(chars);
@@ -1027,6 +1030,9 @@
         if (mjBase[mi] !== ch) return;
         (candByMj.get(mi) || []).forEach(([ji]) => out.add(jisCh[ji]));
       }));
+      // 直接当たった字と、連れてきただけの字を分けて控える。ツリーで出す行を変えるため
+      chars.forEach(c => { directHits.add(c); shrinkPulled.delete(c); });
+      out.forEach(c => { if (!directHits.has(c)) shrinkPulled.add(c); });
       return out;
     }
 
@@ -1485,8 +1491,17 @@
       drawnAt.clear();
       listOrder.forEach((it, i) => {
         firstRowOf[i] = treeRows.length;
-        const mjs = (mjByChar.get(it.char) || []).slice();
+        let mjs = (mjByChar.get(it.char) || []).slice();
         if (!mjs.length) return;
+        // 縮退先として連れてきただけの字は、その字自身の例示字形と、フィルタに当たった字へ
+        // 繋がるMJだけを出す。あめかんむりで引いたとき 覇 は 霸 の縮退先として出てくるが、
+        // 雨と縁の無い異体字 覇󠄃(MJ024209) まで並べる筋合いは無い。
+        // 直接当たった字（きへんの 松 など）は異体字ごと全部出す。
+        if (shrinkPulled.has(it.char)) {
+          mjs = mjs.filter(m => (repOf.has(m) && jisCh[repOf.get(m)] === it.char)
+                             || (candByMj.get(m) || []).some(([ji]) => directHits.has(jisCh[ji])));
+          if (!mjs.length) return;
+        }
         // 既に前の群で描いたMJだけで出来ている群は描かない。
         // 惡(1-56-08) の群は 悪(1-16-13) の群と同じMJ・同じ縮退先を繰り返すだけなので、
         // 縮退が集まる側（一覧で先に来る方）に一本化する。
