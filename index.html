@@ -52,8 +52,13 @@
 
     /* フィルタの有無に関わらず同じ1本のグリッドで描画し、区(ku)が切り替わった最初のカードだけ
        カード左上に区番号を重ねて表示する。カード自体の余白・高さは元のまま変えないので、
-       ラベルの有無でカードがかさばったりガタついたりしない。 */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; margin-bottom: 6px; }
+       ラベルの有無でカードがかさばったりガタついたりしない。
+       カードは5万枚を超える。全部DOMに置くと20万ノードになるので、グリッドは高さだけ持つ器にして
+       見えている行だけ実体化する（縮退ツリーのペインと同じ）。列の割り付けは JS 側が calc() で
+       書き込むので、列数が変わらない伸縮はブラウザ任せで追随する。 */
+    .grid { position: relative; margin-bottom: 6px; }
+    /* 絶対配置にするのは一覧のカードだけ。変体仮名の .card は通常のフローのまま */
+    .grid .card { position: absolute; box-sizing: border-box; }
     .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 5px; text-align: center; cursor: pointer; position: relative; transition: transform 0.1s, box-shadow 0.1s; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     .card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); background: #ebf5fb; }
     /* 区の切れ目を示すラベル。カードの外枠に重ねるだけでレイアウトの高さには影響しない */
@@ -174,6 +179,9 @@
     body.tree-on .radical-grid { max-height: 28vh; overflow-y: auto; }
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
+    /* 変体仮名も同じように貼り付ける。ページごと流すと五十音10段で5千px超になり、
+       上に置いた「移動」の札まで戻れなくなる。 */
+    #hentaiganaContainer { position: sticky; top: 8px; height: calc(100vh - 16px); overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     body.tree-on #treePane { display: block; }
     /* ツリーだけ表示。ツリーの幅は5列ぶんで決まっているので、空いた幅は左右に振って中央に置く */
     body.list-off #kanjiContainer { display: none; }
@@ -261,6 +269,12 @@
 
   <!-- ================= 変体仮名モード ================= -->
   <div id="hentaigana" class="tab-content">
+    <div class="search-container">
+      <div class="find-row jump-row">
+        <span class="bar-label">移動</span>
+        <span class="row-body" id="kanaJump"></span>
+      </div>
+    </div>
     <div id="hentaiganaContainer"></div>
   </div>
 
@@ -699,6 +713,10 @@
       allKanjiList[3] = Array.from(JIS3_ALL).filter((v, i, a) => a.indexOf(v) === i);
       allKanjiList[4] = Array.from(JIS4_ALL).filter((v, i, a) => a.indexOf(v) === i);
 
+      // 水準は文字が決まった時点で確定する。カードを描いた副作用で埋めていると、
+      // 見えている行しか描かなくなった時に外字の判定やツリーの列が静かに狂う
+      [1, 2, 3, 4].forEach(level => allKanjiList[level].forEach(c => charLevel.set(c, level)));
+
       // KU_RUNSをallKanjiList[level]と同じ並びの区番号配列に展開
       [1, 2, 3, 4].forEach(level => {
         KU_RUNS[level].forEach(([ku, count]) => {
@@ -715,6 +733,7 @@
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       document.getElementById(tabId).classList.add('active');
       event.target.classList.add('active');
+      if (tabId === 'kanji') relayout(); // 隠れているあいだは幅0で測れないので、戻った時に引き直す
     }
 
     // --- 漢字モードのUI制御 ---
@@ -785,7 +804,7 @@
     function renderKanji() {
       const container = document.getElementById('kanjiContainer');
       container.innerHTML = '';
-      listOrder = []; cardEls = [];
+      listOrder = []; sections = [];
 
       let targetChars = null; // null = すべて
       const checked = document.querySelector('input[name="radical"]:checked');
@@ -828,29 +847,23 @@
         if (items.length === 0) return;
         total += items.length;
 
-        const sep = document.createElement('div');
-        sep.className = `level-separator lvl${level}`;
-        sep.innerHTML = `<span>第${level}水準</span>`;
-        container.appendChild(sep);
-
         // フィルタの有無に関わらず1本のグリッドで描画。区が変わった最初のカードだけ溝に区番号を出す。
-        const grid = document.createElement('div');
-        grid.className = 'grid';
+        // 札の有無は窓を組み直すたびに要るので、描画結果ではなく listOrder 側に持たせる。
+        const base = listOrder.length;
         let prevKu = null;
-        const html = items.map(({ char, ku }) => {
-          const kuLabel = ku !== prevKu ? `区${ku}` : '';
+        items.forEach(({ char, ku }) => {
+          listOrder.push({ char, level, ku, tag: ku !== prevKu ? `区${ku}` : '' });
           prevKu = ku;
-          return kanjiCardHtml(char, level, ku, kuLabel);
         });
-        container.appendChild(grid);
-        fillGrid(grid, html);
+        addSection(container, `lvl${level}`, `第${level}水準`, items.length, base);
       });
 
       // 外字は面区点を持たないので、面区点で絞っているときは出さない
       if (!kuOk) total += renderGaiji(container, targetChars, blk);
 
-      if (total === 0) container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>';
-      buildSectionJump(container);
+      if (total === 0) { container.innerHTML = '<div class="empty-msg">該当する漢字が見つかりませんでした。</div>'; sections = []; }
+      relayout();        // 高さを入れて位置を測り直し、見えている窓だけ描く
+      buildSectionJump();
       rebuildTree();
     }
 
@@ -873,57 +886,52 @@
 
     /* ---- 見出しへ飛ぶチップ ----
        一覧は5万枚を超えるので、スクロールだけでは記号も外字も辿り着けない。
-       見出しは renderKanji が組んだものをそのまま使い、件数は次に来るグリッドの枚数で数える。 */
-    function buildSectionJump(container) {
+       カードは見えている行しか実体化しないので、件数はセクションの記述子から出す。 */
+    function buildSectionJump() {
       const bar = document.getElementById('sectionJump');
       bar.innerHTML = '';
-      container.querySelectorAll('.level-separator').forEach(sep => {
-        const grid = sep.nextElementSibling;
-        const n = grid && grid.classList.contains('grid') ? grid.children.length : 0;
-        const lv = (sep.className.match(/lvl(\d)/) || [])[1];
+      sections.forEach(s => {
         const b = document.createElement('button');
         b.className = 'jump-chip';
-        b.style.color = LEVEL_COLOR[lv] || LEVEL_COLOR[5];
-        b.innerHTML = `${sep.textContent.trim()}<span class="n">${n.toLocaleString()}</span>`;
-        b.onclick = () => scrollToSection(sep);
+        b.style.color = LEVEL_COLOR[s.lv] || LEVEL_COLOR[5];
+        b.innerHTML = `${s.label}<span class="n">${s.n.toLocaleString()}</span>`;
+        b.onclick = () => scrollToSection(s);
         bar.appendChild(b);
       });
     }
 
-    // 見出しは sticky で上端に貼り付くので位置の基準にならない。次に来るグリッドから測り、
-    // 見出しの高さぶん手前に止める。ツリーONのときは一覧が独自のスクロールコンテナになる。
-    function scrollToSection(sep) {
-      const grid = sep.nextElementSibling;
-      if (!grid) return;
-      const head = sep.offsetHeight + 8;
-      if (!document.body.classList.contains('tree-on')) {
-        window.scrollTo(0, window.scrollY + grid.getBoundingClientRect().top - head);
-        return;
-      }
+    // 見出しは sticky で上端に貼り付くので位置の基準にならない。グリッドの位置から測り、
+    // 見出しの高さぶん手前に止める。見出しは数個しか無いので、その高さだけは実測でよい。
+    function scrollToSection(s) {
       driver = 'list';
-      const pane = el('kanjiContainer');
-      pane.scrollTop = paneTop(grid, pane) - head;
-      lastListTop = pane.scrollTop;
-      syncTree();
+      listScrollTo(s.top - (s.sep.offsetHeight + 8));
+      if (!document.body.classList.contains('tree-on')) return;
+      // 見出しの手前に止めるので、スクロール位置から引くと1つ前のセクションの末尾に当たり、
+      // ツリーが送りきれない。ツリーはそのセクションの先頭のカードに直接合わせる。
+      // 記号はツリーの行を持たないので（base<0）、そこは位置から引くしかない。
+      if (s.base < 0) { syncTree(); return; }
+      curAnchor = -1;
+      alignTree(s.base);
     }
 
-    /* カードは1枚ずつ createElement すると5万枚で効くので、HTMLを組んでグリッド単位で流し込む。
+    /* カードは1枚ずつ createElement すると効くので、HTMLを組んでグリッド単位で流し込む。
        クリックは #kanjiContainer の委譲で受けるので、カードごとのハンドラも張らない。 */
-    function cardHtml(cls, char, title, extra) {
-      return `<div class="card ${cls}" title="${title}" data-char="${char}">`
+    function cardHtml(cls, char, title, extra, style) {
+      return `<div class="card ${cls}" style="${style}" title="${title}" data-char="${char}">`
         + `${extra || ""}${tokDot(Array.from(char)[0])}<span class="char-main">${char}</span></div>`;
     }
-    function kanjiCardHtml(char, level, ku, kuLabel) {
-      // ツリーの行順・縦スクロール同期の基準として一覧の並びを控えておく
-      charLevel.set(char, level);
-      listOrder.push({ char, level, ku });
-      const jis = charJis.get(char) || (ku == null ? `第${level}水準` : `第${level}水準 区${ku}`);
-      return cardHtml(`lvl${level}`, char, `「${char}」 ${jis}`, kuLabel ? `<span class="ku-tag">${kuLabel}</span>` : "");
-    }
-    // グリッドに流し込んだあと、DOMノードを一覧の並びと同じ順で控える
-    function fillGrid(grid, html) {
-      grid.innerHTML = html.join("");
-      for (const node of grid.children) cardEls.push(node);
+    /* 一覧の i 番目のカードを、そのセクションの j 枚目の位置に組む。
+       窓に入るたびに組み直されるので、札も説明も listOrder の中身だけから作れるようにしてある。 */
+    function listCardHtml(i, j) {
+      const it = listOrder[i];
+      const title = it.mj
+        ? `「${it.char}」 ${it.mj} U+${it.char.codePointAt(0).toString(16).toUpperCase()} ${it.blk}`
+        : `「${it.char}」 ${charJis.get(it.char) || (it.ku == null ? `第${it.level}水準` : `第${it.level}水準 区${it.ku}`)}`;
+      // 光らせる1枚はDOMではなく添字で持っているので（flashI）、ここで着せ直す
+      const hot = i === flashI;
+      return cardHtml(`lvl${it.level}${hot ? " flash" : ""}`, it.char, title,
+        it.tag ? `<span class="ku-tag">${it.tag}</span>` : "",
+        cardPos(j) + (hot ? `;--flash:${LEVEL_COLOR[it.level] || LEVEL_COLOR[5]}` : ""));
     }
 
     // --- 変体仮名モードのUI制御（あ行/か行…ごとにセパレートし、ひらがな単位で改行して常時全件表示） ---
@@ -932,6 +940,7 @@
       container.innerHTML = '';
 
       let total = 0;
+      const jumps = []; // 移動チップの元。見出しと、そこにぶら下がる枚数
       // 繰り返し記号（踊り字）。五十音の行には属さないので先頭に1行だけ置く
       const repeatSep = document.createElement('div');
       repeatSep.className = 'level-separator';
@@ -954,6 +963,7 @@
       });
       container.appendChild(repeatGrid);
       total += KANA_REPEATS.length;
+      jumps.push({ sep: repeatSep, label: '繰り返し記号', n: KANA_REPEATS.length });
 
       GOJUON_ROWS.forEach(row => {
         const baseItems = row.bases.map(base => HENTAIGANA_DATA.filter(d => d.base === base));
@@ -965,6 +975,7 @@
         sep.className = 'level-separator';
         sep.innerHTML = `<span>${row.label}</span>`;
         container.appendChild(sep);
+        jumps.push({ sep, label: row.label, n: rowTotal });
 
         row.bases.forEach((base, i) => {
           const items = baseItems[i];
@@ -998,6 +1009,26 @@
       });
 
       if (total === 0) container.innerHTML = '<div class="empty-msg">該当する変体仮名が見つかりませんでした。</div>';
+      buildKanaJump(jumps);
+    }
+
+    /* ---- 見出しへ飛ぶチップ（変体仮名モード） ----
+       五十音が10段あり、下の行はスクロールしないと辿り着けないので漢字モードと同じ札を出す。
+       一覧は漢字モードのペインと同じく画面に貼り付けてあるので、送るのはその中だけ。
+       見出しは sticky で上端に貼り付き位置の基準にならないため、次に来る中身から測る。 */
+    function buildKanaJump(jumps) {
+      const bar = document.getElementById('kanaJump');
+      bar.innerHTML = '';
+      jumps.forEach(j => {
+        const b = document.createElement('button');
+        b.className = 'jump-chip';
+        b.innerHTML = `${j.label}<span class="n">${j.n.toLocaleString()}</span>`;
+        b.onclick = () => {
+          const pane = document.getElementById('hentaiganaContainer');
+          pane.scrollTop = paneTop(j.sep.nextElementSibling || j.sep, pane) - (j.sep.offsetHeight + 8);
+        };
+        bar.appendChild(b);
+      });
     }
 
     /* =====================================================================
@@ -1026,7 +1057,8 @@
     let mjBase = [];              // MJ index -> 基底の1文字。ツリーの並べ替えで何度も引くので先に作っておく
 
     // 一覧の描画順。ツリーの行順と縦スクロール同期の基準になる
-    let listOrder = [], cardEls = [];
+    let listOrder = [], sections = [];
+    let cols = 1, pitch = 0;      // 一覧の列数とカード1行の送り。実測するのはこの2つだけ
     let treeRows = [], treeGroups = [], firstRowOf = [], drawnAt = new Map();
 
     const el = id => document.getElementById(id);
@@ -1228,19 +1260,13 @@
       const items = KANJI_SYMBOLS.filter(([ch]) => targetChars === null || targetChars.has(ch));
       if (!items.length) return 0;
 
-      const sep = document.createElement("div");
-      sep.className = "level-separator lvl5 flat";
-      sep.innerHTML = "<span>記号</span>";
-      container.appendChild(sep);
-      const grid = document.createElement("div");
-      grid.className = "grid";
-      container.appendChild(grid);
-
-      // 記号はツリーの行を持たない（縮退先ではなく添え字なので）ので listOrder には積まない
-      grid.innerHTML = items.map(([ch, name]) => {
+      // 記号はツリーの行を持たない（縮退先ではなく添え字なので）ので listOrder には積まない。
+      // 積まないぶん base を持たないので、セクションには -1 を渡して位置の計算から外す
+      addSection(container, "lvl5 flat", "記号", items.length, -1, j => {
+        const [ch, name] = items[j];
         const jis = charJis.get(ch);
-        return cardHtml("lvl5", ch, `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`);
-      }).join("");
+        return cardHtml("lvl5", ch, `「${ch}」 ${name} ${jis ? jis + " " : ""}U+${ch.codePointAt(0).toString(16).toUpperCase()}`, "", cardPos(j));
+      });
       return items.length;
     }
 
@@ -1257,35 +1283,26 @@
         // charLevel は第1〜4水準だけを持つ（外字は入れない）ので、この has() は水準字かどうかを見る
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
-        const base = mjBase[i], ch = m[1];
+        const ch = m[1];
         if (SYMBOL_CHARS.has(ch)) return; // 記号セクションに出しているので重ねない
         if (targetChars !== null && !targetChars.has(ch)) return;
         const code = ch.codePointAt(0);
         if (blk && cjkBlock(code) !== blk) return;
-        items.push({ char: ch, base, mj: mjName(m[0]), code });
+        items.push({ char: ch, mj: mjName(m[0]), code });
       });
       if (!items.length) return 0;
       items.sort((a, b) => a.code - b.code || a.mj.localeCompare(b.mj));
 
       // 外字は面区点を持たないので、水準側の「区」の札にあたるものがUnicodeブロックになる。
       // 区分を分けずに1本のグリッドのまま、ブロックが変わった最初のカードだけ札を出す。
-      const sep = document.createElement("div");
-      sep.className = "level-separator lvl5";
-      sep.innerHTML = "<span>MJ外字</span>";
-      container.appendChild(sep);
-      const grid = document.createElement("div");
-      grid.className = "grid";
-      container.appendChild(grid);
-
+      const base = listOrder.length;
       let prevBlock = null;
-      fillGrid(grid, items.map(it => {
-        const blockName = cjkBlock(it.code);
-        const label = blockName !== prevBlock ? `<span class="ku-tag">${blockName}</span>` : "";
-        prevBlock = blockName;
-        listOrder.push({ char: it.char, level: 5, mj: it.mj });
-        return cardHtml("lvl5", it.char,
-          `「${it.char}」 ${it.mj} U+${it.code.toString(16).toUpperCase()} ${blockName}`, label);
-      }));
+      items.forEach(it => {
+        const blk2 = cjkBlock(it.code);
+        listOrder.push({ char: it.char, level: 5, mj: it.mj, blk: blk2, tag: blk2 !== prevBlock ? blk2 : "" });
+        prevBlock = blk2;
+      });
+      addSection(container, "lvl5", "MJ外字", items.length, base);
       return items.length;
     }
 
@@ -1565,6 +1582,115 @@
       return node.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop;
     }
 
+    /* ---- 一覧の仮想スクロール ----
+       カードは5万枚を超える。全部DOMに置くと20万ノードになり、絞り込みのたびに700msかかる。
+       ツリーのペインと同じで、位置は測らずに計算し、見えている行だけ実体化する。
+       測るのは「カード1行の送り」と「各グリッドの容器内での位置」だけで、あとは算術で出す。
+       カードの left/top/width はこちらが書き込むので、ブラウザの実際の配置とずれようがない。 */
+    const GAP = 10, MIN_W = 80;   // .grid が持っていた gap:10px と minmax(80px,1fr) の写し
+    const OVER = 4;               // 窓の上下に余分に組む行数。窓がこの帯から出るまでは組み直さない
+
+    // そのセクションの j 枚目のカードの位置。幅は % なので、列数が変わらない伸縮は
+    // ブラウザが追随する（auto-fill の 1fr が持っていた性質をそのまま残す）
+    const cardPos = j => `left:calc((100% + ${GAP}px)*${j % cols}/${cols});`
+      + `top:${Math.floor(j / cols) * pitch}px;width:calc((100% + ${GAP}px)/${cols} - ${GAP}px)`;
+
+    // listOrder の添字 -> そのカードが属するセクション。記号は listOrder に積まないので base<0 を飛ばす
+    function secOf(i) {
+      let s = null;
+      for (const x of sections) if (x.base >= 0 && x.base <= i) s = x;
+      return s;
+    }
+    // listOrder の添字 -> カードの上端（容器内座標）。paneTop と同じ基準
+    function cardY(i) {
+      const s = secOf(i);
+      return s ? s.top + Math.floor((i - s.base) / cols) * pitch : 0;
+    }
+    // その高さに掛かっている行の最後のカード。カードのDOMを二分探索していた頃と同じ答えになる
+    // （同じ行のカードは上端が等しいので、あの二分探索は必ず行末を返していた）
+    function cardIndexAt(y) {
+      if (!pitch) return 0;   // まだ測れていない（幅0で畳まれている）
+      let s = null;
+      for (const x of sections) if (x.base >= 0 && x.top <= y) s = x;
+      if (!s) return 0;
+      const row = Math.min(s.rows - 1, Math.max(0, Math.floor((y - s.top) / pitch)));
+      return Math.min(s.base + row * cols + cols - 1, s.base + s.n - 1);
+    }
+
+    /* 一覧の見えている範囲を容器内の座標で返す。一覧が独自のスクロール容器になるのは
+       ツリーONのときだけで（CSS: body.tree-on #kanjiContainer{overflow-y:auto}）、
+       OFFのときはページごと動く。paneTop と同じ基準なので cardY とそのまま比べられる。 */
+    const treeOn = () => document.body.classList.contains("tree-on");
+    function listView() {
+      const pane = el("kanjiContainer");
+      return treeOn() ? { pane, top: pane.scrollTop, h: pane.clientHeight }
+                      : { pane, top: -pane.getBoundingClientRect().top, h: innerHeight };
+    }
+    function listScrollTo(y) {
+      const v = listView();
+      if (treeOn()) { v.pane.scrollTop = y; lastListTop = v.pane.scrollTop; }
+      else window.scrollTo(0, window.scrollY + y - v.top);
+    }
+
+    // 見出しとグリッドを1組作って控える。カードの中身は窓に入ったときに make(j) で組む
+    function addSection(container, cls, label, n, base, make) {
+      const sep = document.createElement("div");
+      sep.className = "level-separator " + cls;
+      sep.innerHTML = `<span>${label}</span>`;
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      container.append(sep, grid);
+      sections.push({ sep, grid, label, lv: +(cls.match(/lvl(\d)/) || [])[1] || 5, n, base,
+                      make: make || (j => listCardHtml(base + j, j)), top: 0, rows: 0, a: -1, b: -1 });
+    }
+
+    /* 列数もカードの高さもCSSから決まる値で、宣言としては読めない。プローブを1枚だけ挿して
+       測り、あとは全部計算で出す。グリッドには行数ぶんの高さを入れておくので、見出しのsticky
+       もページ全体のスクロール量も、カードを全部置いていた頃と1pxも変わらない。 */
+    function relayout() {
+      if (!sections.length) return;
+      const pane = el("kanjiContainer"), g0 = sections[0].grid, w = g0.clientWidth;
+      if (!w) return;   // 変体仮名タブに居るあいだ／一覧OFF。表に戻ったときに測り直す
+      cols = Math.max(1, Math.floor((w + GAP) / (MIN_W + GAP)));  // auto-fill の列数と同じ式
+      g0.innerHTML = sections[0].make(0);
+      pitch = g0.firstElementChild.getBoundingClientRect().height + GAP;
+      console.assert(pitch > GAP, "カードの高さが測れていません");
+      sections.forEach(s => {
+        s.rows = Math.ceil(s.n / cols);
+        s.grid.style.height = (s.rows * pitch - GAP) + "px";  // 最終行の後ろにgapは付かない
+        s.a = s.b = -1;                                       // 窓を捨てて次の描画で組み直させる
+      });
+      sections.forEach(s => s.top = paneTop(s.grid, pane));   // 高さを入れ終えてから測る
+      renderCardWindow();
+    }
+
+    // 見えている行だけ実体化する。帯を少し広めに組み、窓が帯から出たときだけ組み直す
+    // （スクロールのたびに innerHTML を捨てると :hover が落ちてカードがちらつく）
+    function renderCardWindow() {
+      if (!pitch || !sections.length) return;
+      const v = listView();
+      // 畳まれている最中は窓の高さが0になる。ここで全セクションを空にすると、
+      // 高さが戻っても引き直す機会が無いまま真っ白になるので、触らずに帰る
+      if (v.h <= 0) return;
+      for (const s of sections) {
+        const a0 = Math.max(0, Math.min(s.rows, Math.floor((v.top - s.top) / pitch)));
+        const b0 = Math.max(0, Math.min(s.rows, Math.ceil((v.top + v.h - s.top) / pitch)));
+        // 窓から外れたセクションは空にする。残しておくと、光らせた1枚のように
+        // もう古くなった中身がそのまま居座る（0,0 は空の印で、二度目は素通りする）
+        if (b0 <= a0) { if (s.a !== 0 || s.b !== 0) { s.grid.innerHTML = ""; s.a = s.b = 0; } continue; }
+        if (a0 >= s.a && b0 <= s.b) continue;   // まだ帯の中
+        const a = Math.max(0, a0 - OVER), b = Math.min(s.rows, b0 + OVER);
+        let out = "";
+        for (let j = a * cols, e = Math.min(b * cols, s.n); j < e; j++) out += s.make(j);
+        s.grid.innerHTML = out; s.a = a; s.b = b;
+      }
+    }
+    // 光らせる1枚が変わったときなど、帯が動いていなくても組み直させる
+    function redrawCards() {
+      sections.forEach(s => { s.a = s.b = -1; });
+      renderCardWindow();
+    }
+
     function setAnchor(i) {
       if (i === curAnchor) return false;
       curAnchor = i;
@@ -1582,17 +1708,18 @@
     }
 
     // 一覧 → ツリー
-    function syncTree() {
-      if (!mjmap || !treeRows.length || !cardEls.length || !showsList()) return;
-      const pane = el("kanjiContainer");
-      const top = pane.scrollTop;
-      let lo = 0, hi = cardEls.length - 1, i = 0;
-      while (lo <= hi) { const m = (lo + hi) >> 1; if (paneTop(cardEls[m], pane) <= top + 8) { i = m; lo = m + 1; } else hi = m - 1; }
+    // 一覧の i 番目のカードに合わせてツリーを送る
+    function alignTree(i) {
       setAnchor(i);
       const tp = el("treePane");
       const want = treeRows[firstRowOf[i]] ? treeRows[firstRowOf[i]].y : 0;
       if (Math.abs(tp.scrollTop - want) > 1) { tp.scrollTop = want; lastTreeTop = tp.scrollTop; }
       renderTreeWindow();
+    }
+
+    function syncTree() {
+      if (!mjmap || !treeRows.length || !sections.length || !showsList()) return;
+      alignTree(cardIndexAt(listView().top + 8));
     }
 
     // ツリー → 一覧
@@ -1602,10 +1729,10 @@
       const r = treeRows[lowerBound(tp.scrollTop)];
       if (!r) return;
       setAnchor(r.anchor);
-      const pane = el("kanjiContainer"), card = cardEls[r.anchor];
-      if (card && showsList()) {
-        const want = paneTop(card, pane) - 8;
-        if (Math.abs(pane.scrollTop - want) > 1) { pane.scrollTop = want; lastListTop = pane.scrollTop; }
+      // カードは実体化していなくても位置は計算で出るので、画面の外の字にも効く
+      if (showsList() && sections.length) {
+        const want = cardY(r.anchor) - 8, v = listView();
+        if (Math.abs(v.top - want) > 1) listScrollTo(want);
       }
       renderTreeWindow();
     }
@@ -1617,6 +1744,7 @@
         p.addEventListener("pointerdown", () => driver = name);
       });
       list.addEventListener("scroll", () => {
+        renderCardWindow();   // 窓の描き直しはどちらが駆動していても要る（自分で動かした時も含む）
         if (list.scrollTop === lastListTop) return;
         lastListTop = list.scrollTop;
         if (guard || driver === "tree") return;
@@ -1628,6 +1756,15 @@
         if (guard || driver === "list") { renderTreeWindow(); return; }
         guard = true; syncList(); requestAnimationFrame(() => guard = false);
       }, { passive: true });
+      // ツリーOFFのときは一覧ではなくページが動くので、窓はこちらで引き直す
+      window.addEventListener("scroll", () => { if (!treeOn()) renderCardWindow(); }, { passive: true });
+      // 幅が変われば列数が変わる。窓の伸縮のほか、ツリーの出入りやタブの切り替えでも
+      // 一覧の幅は変わり、隠れているあいだは0で測れない。窓と容器の両方を見張る
+      // （容器だけだと窓の伸縮を取りこぼす環境があり、窓だけだとペインの出入りを拾えない）。
+      window.addEventListener("resize", relayout);
+      if (window.ResizeObserver) new ResizeObserver(() => relayout()).observe(el("kanjiContainer"));
+      // 見出しの高さはグリフ依存なので、フォントが遅れて来たら位置を測り直す
+      if (document.fonts) document.fonts.ready.then(relayout);
     }
 
     // ホバーは強調するだけ。マウスを乗せただけで表示が動くと落ち着いて読めないので、
@@ -1681,6 +1818,7 @@
       document.body.classList.toggle("tree-on", tree.checked);
       document.body.classList.toggle("list-off", !list.checked);
       saveTreeOpen(tree.checked);
+      relayout(); // ツリーペインの出入りで一覧の幅もスクロールのしかたも変わる
       // 隠していた側のペインはスクロール位置を保っていないので、残っている側を基準に引き直す
       if (tree.checked) {
         if (treeDirty) rebuildTree(); // 閉じているあいだに変わった一覧を、開くこの時に反映する
@@ -1703,8 +1841,19 @@
       if (g) copyText(g.dataset.c, `「${g.dataset.c}」`);
     });
 
+    /* 見えているものは動かさない。外に出ているときだけ、入りきる最小の量だけ送る。
+       head は上端に貼り付く見出しのぶんで、その下からが実際に読める範囲になる。
+       画面の中の物をわざわざ端へ寄せ直すと、どこから飛んだのか目で追えなくなる。 */
+    function minScroll(cur, viewH, head, top, h) {
+      if (top - head < cur) return Math.max(0, top - head); // 上へはみ出している
+      if (top + h > cur + viewH) return top + h - viewH;    // 下へはみ出している
+      return cur;                                           // 見えているので動かさない
+    }
+
     // 一覧の該当カードへスクロールし、ツリーもその行に合わせて1秒光らせる。見つかれば true
-    let flashed = null, flashTimer = 0;
+    // 光らせる1枚はDOMに触らず添字で持つ。飛んだ先でスクロールが走ると窓が組み直されて、
+    // ノードに付けたクラスは16msで消えてしまうため（ツリーの hoverChar と同じ持ち方）
+    let flashI = -1, flashTimer = 0;
     function jumpToChar(ch) {
       const i = listOrder.findIndex(it => it.char === ch);
       if (i < 0) return false;
@@ -1715,15 +1864,9 @@
         applyView();
       }
       driver = "list";
-      const pane = el("kanjiContainer"), card = cardEls[i];
-      const top = paneTop(card, pane);
-      // 上端ぴったりだと sticky の水準見出しに潜るので、窓の1/4ほど下に置く
-      const margin = Math.min(pane.clientHeight / 4, 140);
-      // 既に見えているカードをわざわざ動かすと目で追えなくなるので、外に居る時だけ動かす
-      if (top < pane.scrollTop + 40 || top > pane.scrollTop + pane.clientHeight - 60) {
-        pane.scrollTop = top - margin;
-        lastListTop = pane.scrollTop;
-      }
+      // 76px は sticky の水準見出しのぶん。下は行が半分で切れないよう少し余分に見る
+      const v = listView(), ly = minScroll(v.top, v.h, 76, cardY(i), pitch + 12);
+      if (ly !== v.top) listScrollTo(ly);
       hoverChar = ch;
       curAnchor = -1;
       setAnchor(i); // 一覧は横に十数字並ぶのでアンカーは自動判定に任せず対象に固定する
@@ -1731,7 +1874,13 @@
       let want = treeRows[firstRowOf[i]];
       if (!want || listOrder[want.anchor].char !== ch) want = treeRows[drawnAt.get(ch)] || want;
       const tp = el("treePane");
-      if (want && Math.abs(tp.scrollTop - want.y) > 1) { tp.scrollTop = want.y; lastTreeTop = tp.scrollTop; }
+      if (want) {
+        // 行の y は tree-head のぶんを差し引いた座標なので、上端は head の下に出る。
+        // 読める高さはペインから head を除いたぶん。
+        const hd = tp.querySelector(".tree-head");
+        const ty = minScroll(tp.scrollTop, tp.clientHeight - (hd ? hd.offsetHeight : 0), 0, want.y, want.h + 8);
+        if (Math.abs(tp.scrollTop - ty) > 1) { tp.scrollTop = ty; lastTreeTop = tp.scrollTop; }
+      }
       renderTreeWindow();
 
       // ペインは部首フィルタの下にあるので、画面に入っていなければページごと送る
@@ -1740,12 +1889,10 @@
         window.scrollTo({ top: window.scrollY + box.top - 8, behavior: "smooth" });
       }
 
-      if (flashed) flashed.classList.remove("flash");
       clearTimeout(flashTimer);
-      card.style.setProperty("--flash", LEVEL_COLOR[listOrder[i].level] || LEVEL_COLOR[5]);
-      card.classList.add("flash");
-      flashed = card;
-      flashTimer = setTimeout(() => card.classList.remove("flash"), 1000);
+      flashI = i;
+      redrawCards(); // 飛んだ先がまだ実体化されていないので、光らせる1枚を入れて組み直す
+      flashTimer = setTimeout(() => { flashI = -1; redrawCards(); }, 1000);
       return true;
     }
 
