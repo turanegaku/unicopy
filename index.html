@@ -946,7 +946,8 @@
 
       let targetChars = null; // null = すべて
       // 部首は複数選べる。選んだぶんはANDで重ねる（人名用漢字や検索と同じ畳み方）
-      document.querySelectorAll('input[name="radical"]:checked').forEach(box => {
+      const radicals = document.querySelectorAll('input[name="radical"]:checked');
+      radicals.forEach(box => {
         const [part, rad] = box.value.split('::');
         const set = new Set(KANJI_RADICALS[part][rad]);
         // 外字は数が多いので一覧には埋め込まず mjmap.json に置いてある。読めていれば足す
@@ -954,6 +955,9 @@
         if (gai) for (const c of gai) set.add(c);
         targetChars = targetChars ? new Set([...targetChars].filter(c => set.has(c))) : set;
       });
+      // 当たった字の縮退先も一覧に入れる。あめかんむりで引くと 霸 は出るが 覇 は出ないので、
+      // 霸 の字形(MJ027866)が縮退する先の 覇 の群がツリーに出てこない。検索と同じ扱いにする
+      if (radicals.length) targetChars = withShrinkTargets(targetChars);
       // 人名用漢字は第1〜3水準に散っているので、部首と同じ絞り込みとして重ねる
       if (el('onlyJinmei').checked) {
         targetChars = targetChars ? new Set([...targetChars].filter(c => JINMEI_CHARS.has(c))) : new Set(JINMEI_CHARS);
