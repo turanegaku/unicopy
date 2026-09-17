@@ -944,7 +944,7 @@
        ので独立したビットを持ち、強さの順どおり包摂の次に置いてある。 */
     const SRC = [
       { id: "srcJis",    label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
-      { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（466本）" },
+      { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（364組）" },
       { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
       { id: "srcGoji",   label: "誤字俗字",   tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民一2842号通達別表 誤字俗字・正字一覧表（1,001本）" },
       { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
@@ -1066,13 +1066,41 @@
       candByMj.clear(); mjByChar.clear();
       shrinkChars.clear();
       const mask = srcMask();
+      // MJ index -> Map(面区点の添字 -> { on: 立っている根拠のビット, bits: 元のビット, kt: 派生した新旧字体の段 })
+      const edges = new Map();
       mjmap.mj.forEach((m, mi) => m[2].forEach(([ji, bits]) => {
         const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
         if (!on && !(bits & BIT_REP)) return;
-        push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI), !!(bits & BIT_REP)]);
+        if (!edges.has(mi)) edges.set(mi, new Map());
+        edges.get(mi).set(ji, { on, bits, kt: null });
+      }));
+      /* 新旧字体は 邊→辺 という面区点どうしの対応で、mjmap.json では旧字体の正字（邊󠄈）から
+         新字体へのエッジ1本にだけビットが立っている。他のMJは、いま選んでいる根拠で 邊 に
+         届いていれば（包摂・戸籍…）、邊 の新旧字体を1段たどって 辺 へも縮退させる。
+         包摂を切れば 邊󠄏(MJ026199) は 邊 に届かないので 辺 へも行かない。
+         派生したエッジの段は 邊 へ届いた根拠の段。边(MJ025757) は親字で 邊 なので 辺 へも破線で、
+         橙にはしない（橙は規格の段で 邊 に届いた字だけ）。 */
+      if (SRC.find(s => s.kj).on) {
+        const kyuuOf = new Map(); // 旧字体の面区点の添字 -> [新字体の面区点の添字]
+        repOf.forEach((ji, mi) => (edges.get(mi) || new Map()).forEach((e, nj) => {
+          if (e.on & BIT_KYUUJITAI) push(kyuuOf, ji, nj);
+        }));
+        edges.forEach(es => [...es].forEach(([ji, hop]) => (kyuuOf.get(ji) || []).forEach(nj => {
+          if (!hop.on) return;
+          const t = tierOf(hop.on);
+          const e = es.get(nj) || es.set(nj, { on: 0, bits: 0, kt: null }).get(nj);
+          if (e.kt == null || t < e.kt) e.kt = t;
+        })));
+      }
+      edges.forEach((es, mi) => es.forEach(({ on, bits, kt }, ji) => {
+        // 直接のエッジと派生した新旧字体のうち強いほうの段。正字だけのエッジ（on=0）は元のビットで
+        let tier = on ? tierOf(on) : kt == null ? tierOf(bits) : 9;
+        let kj = !!((on || bits) & BIT_KYUUJITAI);
+        if (kt != null && kt <= tier) { tier = kt; kj = kt === 0; }
+        push(candByMj, mi, [ji, tier, kj, !!(bits & BIT_REP)]);
         push(mjByChar, jisCh[ji], mi);
         // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
-        if (on) {
+        if (on || kt != null) {
           shrinkChars.add(jisCh[ji]);
           if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
         }
@@ -1179,7 +1207,7 @@
 
     /* ---- ツリーの行を組む ----
        行の並びは一覧のカード順。各カードの文字に関わる MJ をその下にぶら下げる。
-       複数のJIS字に縮退するMJは、それぞれのカードの下に重複して現れる（逆引きとして正しい）。
+       複数のJIS字に縮退するMJは、一覧で先に来るカードの群に1回だけ描く（下の shownPair）。
 
        同じカードの下は「縮退先の組み合わせ」＝枝でまとめ、組み合わせが小さい順に並べる。
        枝は自分を含む直近の枝を親にして、親から増えたぶんの字だけを描く。
@@ -1196,7 +1224,7 @@
 
       treeRows = []; treeGroups = []; firstRowOf = [];
       let y = 0;
-      const shownMJ = new Set();
+      const shownPair = new Set(); // 描いた (MJ index, 面区点の添字)
       drawnAt.clear();
       listOrder.forEach((it, i) => {
         firstRowOf[i] = treeRows.length;
@@ -1211,14 +1239,28 @@
                              || (candByMj.get(m) || []).some(([ji]) => directHits.has(jisCh[ji])));
           if (!mjs.length) return;
         }
-        // 既に前の群で描いたMJだけで出来ている群は描かない。
-        // 惡(1-56-08) の群は 悪(1-16-13) の群と同じMJ・同じ縮退先を繰り返すだけなので、
-        // 縮退が集まる側（一覧で先に来る方）に一本化する。
-        // 群はそこに居るMJの縮退先を全部描くので、畳んでもその字の例示字形は先の群に出ている。
-        // 覇(1-39-38) の群が 覇 ─ MJ024210 / └ 霸(1-59-17) ─ MJ027866 と描くので、
-        // 霸 の群まで立てると [1-39-38 1-59-17] ─ MJ027866 が重ねて出るだけになる。
-        if (mjs.every(m => shownMJ.has(m))) return;
-        mjs.forEach(m => shownMJ.add(m));
+        /* この群で各MJに描く縮退先を決める。
+           (1) 前の群で既に描いた (MJ, 縮退先) の組は二度描かない。
+               惡(1-56-08) の群は 悪(1-16-13) の群と同じMJ・同じ縮退先を繰り返すだけなので、
+               縮退が集まる側（一覧で先に来る方）に一本化する。
+               邊󠄏(MJ026199) は 辺 の群に [辺 邊] で出ているので、邊 の群に重ねて出さない。
+               群はそこに居るMJの縮退先を全部描くので、畳んでもその字の例示字形は先の群に出ている。
+           (2) この群の字へのエッジより弱い根拠の縮退先は、この群では描かない。
+               辺󠄂(MJ025759) は 辺 へ包摂（実線）、邊 へ親字（破線）で、[辺 邊] の枝に入れると
+               邊 の下にぶら下がって「邊 を経て 辺 へ」と読めてしまう。辺 の群では 辺 ─ 辺󠄂 とだけ描き、
+               邊 との関係は 邊 の群で 邊 - - 辺󠄂 として出す（(1) で 辺 は落ちる）。
+           この群の字へのエッジが既に描かれているMJ、描く縮退先が無くなったMJは群から外す。 */
+        const drawSet = new Map();
+        mjs = mjs.filter(m => {
+          const es = candByMj.get(m) || [];
+          const own = es.find(([ji]) => jisCh[ji] === it.char);
+          if (!own || shownPair.has(m + ":" + own[0])) return false;
+          const keep = es.filter(([ji, ti]) => ti <= own[1] && !shownPair.has(m + ":" + ji));
+          drawSet.set(m, keep);
+          return true;
+        });
+        if (!mjs.length) return;
+        mjs.forEach(m => drawSet.get(m).forEach(([ji]) => shownPair.add(m + ":" + ji)));
 
         // 字形が一致するMJ（自身の面区点がこの字）を先に見て、その字に0番を振る
         const isOwn = m => mjBase[m] === it.char;
@@ -1228,7 +1270,7 @@
         const kjEdge = new Set(), repEdge = new Set();
         mjs.forEach(m => {
           let b = 0, worst = 0;
-          (candByMj.get(m) || []).forEach(([ji, ti, kj, rep]) => {
+          drawSet.get(m).forEach(([ji, ti, kj, rep]) => {
             const ch = jisCh[ji];
             let t = byCh.get(ch);
             // 記号は1面1区・5区で第1〜4水準の外に居る。列が無いままだと 5列目＝MJ列へ
@@ -1309,11 +1351,15 @@
           const base = bi === 0 ? 0 : branches[br.parent].bits;
           br.delta = targets.filter(t => (br.bits & (1 << t.idx)) && !(base & (1 << t.idx)) && !drawn.has(t.idx));
           br.delta.forEach(t => drawn.add(t.idx));
-          // 枝の幹は、その枝が増やす縮退先のうち一番弱い根拠の線種で描く
-          br.tier = Math.max(0, ...br.delta.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));
-          br.deltaKj = br.delta.some(t => (tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0) === br.tier
-                                          && kjEdge.has(mjs[br.first] + ":" + t.idx));
-          br.deltaRep = br.delta.some(t => repEdge.has(mjs[br.first] + ":" + t.idx));
+          // 枝の幹は、その枝にぶら下がる全行の、枝が増やす縮退先へのエッジのうち一番弱い根拠で描く。
+          // 先頭行だけで決めると、誤字俗字だけ ON のとき 邊 の枝の幹が先頭の正字 邊󠄈 の青い実線に
+          // なり、破線でぶら下がる誤字たちまで規格で繋がっているように見える。
+          // 正字の青は、枝の全行が正字のときだけ（1:1 の対応しか無い枝）。
+          const rows = []; for (let k = br.first; k <= br.last; k++) rows.push(mjs[k]);
+          const key = (m, t) => m + ":" + t.idx;
+          br.tier = Math.max(0, ...rows.flatMap(m => br.delta.map(t => tierOfEdge.get(key(m, t)) || 0)));
+          br.deltaKj = rows.some(m => br.delta.some(t => (tierOfEdge.get(key(m, t)) || 0) === br.tier && kjEdge.has(key(m, t))));
+          br.deltaRep = rows.every(m => br.delta.some(t => repEdge.has(key(m, t))));
           // 親へ上がる線は、親側の縮退先に対する根拠で描く。新旧字体かどうかは枝の性質として持つ
           const up = targets.filter(t => (base & (1 << t.idx)));
           br.upTier = Math.max(0, ...up.map(t => tierOfEdge.get(mjs[br.first] + ":" + t.idx) || 0));

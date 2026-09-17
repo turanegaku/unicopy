@@ -195,19 +195,20 @@ def build(xlsx_path, shrink_path, kyuujitai):
         if k in pairs:
             pairs[k] |= BIT_REP
 
-    # 旧字体の面区点に包摂されるMJが、新字体の面区点にも縮退している組にビットを立てる
-    by_mj = {}
-    for (i, j), b in pairs.items():
-        by_mj.setdefault(i, []).append((j, b))
+    # 新旧字体は 邊→辺 という面区点どうしの対応なので、旧字体の正字（rep_of）から新字体への
+    # エッジ1本だけに立てる（無ければ作る）。邊 に包摂される他のMJへは立てない。
+    # どのMJが 辺 まで届くかは、読む側が「選んだ根拠で 邊 に届いたら 邊 の新旧字体を1段たどる」
+    # として決める（app.js buildEdges）。ここで他のMJにも立てると、戸籍に載っている字形だけが
+    # 親字・正字のエッジに相乗りして 辺 へ行き、載っていない字形は行かないという歪みが出る。
+    rep_mj = {code: index_of[n] for n, code in rep_of.items()}
     n_marked = 0
     for old, new in kyuujitai:
         oi, ni = jis_idx.get(old), jis_idx.get(new)
-        if oi is None or ni is None:
+        if oi is None or ni is None or old not in rep_mj:
+            print(f'warn: 新旧字体 {old}→{new} の正字が引けない', file=sys.stderr)
             continue
-        for i, es in by_mj.items():
-            if any(j == oi and b & BIT_HOUSETSU for j, b in es) and any(j == ni for j, b in es):
-                pairs[(i, ni)] |= BIT_KYUUJITAI
-                n_marked += 1
+        pairs[(rep_mj[old], ni)] = pairs.get((rep_mj[old], ni), 0) | BIT_KYUUJITAI
+        n_marked += 1
     print(f'新旧字体ビット: {n_marked:,} エッジ ({len(kyuujitai):,} 組から)', file=sys.stderr)
 
     # 縮退先は MJ にぶら下げる（別配列にすると添字を2つ持つぶん嵩む）
