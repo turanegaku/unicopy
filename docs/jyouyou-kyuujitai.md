@@ -1,7 +1,7 @@
 # 常用漢字表（平成22年内閣告示第2号）
 
 `tools/build-mjmap.py` がこのファイルの「対照表」ブロックを読んで、
-`mjmap.json` の各エッジに「常用漢字表の新旧字体」ビット（bit1 = 2）を立てる。
+`mjmap.json` の各エッジに「常用漢字表の新旧字体」ビット（bit2 = 4）を立てる。
 根拠のビットの並びは `mjmap.json` の `meta.bits` に書いてある。
 
 関連: [jis-suijun.md](jis-suijun.md)（JIS水準との関係）、

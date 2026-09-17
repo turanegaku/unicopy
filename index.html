@@ -1020,7 +1020,7 @@
     const candByMj = new Map();   // MJ index -> [面区点の添字]
     const mjIndex = new Map();    // "MJ000089" -> index
     const jisChar = new Map();    // "1-18-81" -> "会"
-    const repOf = new Map();      // MJ index -> その面区点のJIS例示字形になっている面区点のindex
+    const repOf = new Map();      // MJ index -> その面区点のJIS例示字形になっている面区点のindex（bit0）
     const charJis = new Map();    // "会" -> "1-18-81"
     let jisCh = [];               // 面区点の添字 -> 文字
     let mjBase = [];              // MJ index -> 基底の1文字。ツリーの並べ替えで何度も引くので先に作っておく
@@ -1032,10 +1032,10 @@
     const el = id => document.getElementById(id);
     // tokenizer.json の語彙にある字に付ける丸。丸そのものに説明を持たせるので実体の span で出す
     const tokDot = ch => TOK.has(ch) ? '<span class="tok-dot" title="tokenizer.json の語彙にある字"></span>' : '';
-    const cp = hex => hex ? String.fromCodePoint(parseInt(hex, 16)) : "";
     const push = (map, k, v) => { const a = map.get(k); a ? a.push(v) : map.set(k, [v]); };
     const mjName = num => "MJ" + String(num).padStart(6, "0");
-    /* 縮退の根拠。mjmap.json の cand は1エッジにこのビットを複数立てて持つ（meta.bits に同じ並び）。
+    /* 縮退の根拠。mjmap.json の縮退先は1エッジにこのビットを複数立てて持つ（meta.bits に同じ並び）。
+       bit0 はJIS例示字形（下の BIT_REP）で根拠の選択の対象外なので、SRC は bit1 から始まる。
        強い順に並べてあり、線種は立っている根拠のうち一番強いもので決める。
        tier 0=実線（規格）、1=破線（法令・告示）、2=点線（辞書・類推）。新旧字体は橙の実線。
        常用漢字表の新旧字体は戸籍法通達の部分集合ではない（包摂や582号だけで繋がる組が7本ある）
@@ -1051,7 +1051,8 @@
       { id: "srcDict",   label: "辞書",       tier: 2, on: false, hidden: true, title: "辞書類等による関連字（15,958本）" },
       { id: "srcGuess",  label: "読み・字形", tier: 2, on: false, hidden: true, title: "読み・字形による類推（413本）" },
     ];
-    SRC.forEach((s, i) => s.bit = 1 << i);
+    SRC.forEach((s, i) => s.bit = 1 << (i + 1));
+    const BIT_REP = 1;
     const BIT_KYUUJITAI = SRC.find(s => s.kj).bit;
     const srcMask = () => SRC.reduce((m, s) => m | (s.on ? s.bit : 0), 0);
     // 立っている根拠のうち一番強いものの段。SRC は強い順なので先に見つかったものが答え
@@ -1123,11 +1124,13 @@
       mjmap = JSON.parse(text);
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
-      mjmap.mj.forEach((m, i) => mjIndex.set(mjName(m[0]), i));
       repOf.clear();
-      (mjmap.rep || []).forEach(([mi, ji]) => repOf.set(mi, ji));
-      jisCh = mjmap.jis.map(j => cp(j[1]));
-      mjBase = mjmap.mj.map(m => cp(m[1]));
+      jisCh = mjmap.jis.map(j => j[1]);
+      mjBase = mjmap.mj.map(m => m[1] && String.fromCodePoint(m[1].codePointAt(0)));
+      mjmap.mj.forEach((m, i) => {
+        mjIndex.set(mjName(m[0]), i);
+        m[2].forEach(([ji, bits]) => { if (bits & BIT_REP) repOf.set(i, ji); });
+      });
       mjmap.jis.forEach((j, k) => {
         jisChar.set(j[0], jisCh[k]);
         if (!charJis.has(jisCh[k])) charJis.set(jisCh[k], j[0]);
@@ -1144,27 +1147,26 @@
     }
 
     /* 選んだ根拠でエッジを張り直す。根拠を切ると縮退先が無くなるMJは外字へ回る。
-       ただし、包摂規準を当てずにその面区点に対応している字形（X0213 包摂区分0＝
-       mjmap.json の rep）へのエッジは根拠の選択に関わらず残す。縮退マップはこれを包摂規準のエッジとして
+       ただし、その面区点の正字（X0213 包摂区分0 かつ「実装したUCS」あり＝bit0）への
+       エッジは根拠の選択に関わらず残す。縮退マップはこれを包摂規準のエッジとして
        持っている（MJ自身の面区点は別枠では持っていない）が、中身は縮退ではなく
        「この字形がこの面区点の字である」という1:1の対応なので、包摂を外したからと
        いって消してよいものではない。消すと 亜(1-16-01) の字形 MJ006454 や
        亞(1-48-19) が丸ごと落ちて、亞→亜 の新旧字体だけが宙に浮いた1行になる。
 
-       残すのはこの区分0のエッジだけ。基底の符号位置が同じでも包摂規準が当たっているMJ
+       残すのはこの正字のエッジだけ。基底の符号位置が同じでも包摂規準が当たっているMJ
        （医+E0102=MJ007821 は規準U118で1-16-69へ、醫+E0102=MJ026548 も同じくU118）は
        字形が違うので、その面区点との関係は1:1ではなく包摂である。
        区分0は1つの面区点に複数あることがあり（10,909本／10,054面区点、785面区点が2つ以上）、
-       愛(1-16-06) は MJ011751(E0102) と MJ011752(E0101) の両方が区分0になっている。
-       全ての区分0エッジが包摂規準として入っていることは確かめてある。 */
+       愛(1-16-06) は MJ011751(E0102) と MJ011752(E0101) の両方が区分0だが、
+       「実装したUCS」を持つ MJ011752 だけが正字として bit0 を持つ。 */
     function buildEdges() {
       candByMj.clear(); mjByChar.clear();
       shrinkChars.clear();
       const mask = srcMask();
-      mjmap.cand.forEach(([mi, ji, bits]) => {
+      mjmap.mj.forEach((m, mi) => m[2].forEach(([ji, bits]) => {
         const on = bits & mask;   // そのエッジの根拠のうち、いま選ばれているものだけ
-        const self = repOf.get(mi) === ji;
-        if (!on && !self) return;
+        if (!on && !(bits & BIT_REP)) return;
         push(candByMj, mi, [ji, tierOf(on || bits), !!((on || bits) & BIT_KYUUJITAI)]);
         push(mjByChar, jisCh[ji], mi);
         // 絞り込みの「縮退があるものだけ」で使う。1:1の対応しか無い字は数えない
@@ -1172,7 +1174,7 @@
           shrinkChars.add(jisCh[ji]);
           if (mjBase[mi]) shrinkChars.add(mjBase[mi]);
         }
-      });
+      }));
     }
 
     // 続きのグループは1つの箱にまとめて、頭に出典名を1回だけ書く
@@ -1255,11 +1257,10 @@
         // charLevel は第1〜4水準だけを持つ（外字は入れない）ので、この has() は水準字かどうかを見る
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
-        const base = cp(m[1]);
-        const ch = base + (m[2] ? cp(m[2]) : "");
+        const base = mjBase[i], ch = m[1];
         if (SYMBOL_CHARS.has(ch)) return; // 記号セクションに出しているので重ねない
         if (targetChars !== null && !targetChars.has(ch)) return;
-        const code = parseInt(m[1], 16);
+        const code = ch.codePointAt(0);
         if (blk && cjkBlock(code) !== blk) return;
         items.push({ char: ch, base, mj: mjName(m[0]), code });
       });
@@ -1483,7 +1484,7 @@
       const parent = br.parent >= 0 ? g.branches[br.parent] : null;
       const m = mjmap.mj[r.mj];
       const base = mjBase[r.mj];
-      const glyph = m[2] ? base + cp(m[2]) : base; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
+      const glyph = m[1]; // IVS付きなら基底＋選択子でIPAmj明朝が字形を選ぶ
       const mjX = 4 * COL_W + COL_W / 2;
       // 枠を作る枝の先頭行だけは、横線を枠の中心に通して「枠の中心から左へ出す」形にする
       const boxed = r.k === br.first && br.delta.length > 1;
@@ -1760,11 +1761,10 @@
       if (m = /^MJ(\d{1,6})$/i.exec(q)) {
         // 桁を揃えて打っても（MJ0068）、頭の0を省いて打っても（MJ89）前方一致で拾う
         const dig = m[1];
-        if (mjmap) mjmap.mj.forEach(x => {
+        if (mjmap) mjmap.mj.forEach((x, i) => {
           const n = String(x[0]);
           if (!x[1] || !(n.padStart(6, "0").startsWith(dig) || n.startsWith(dig))) return;
-          out.add(cp(x[1]));
-          if (x[2]) out.add(cp(x[1]) + cp(x[2]));
+          out.add(mjBase[i]); out.add(x[1]);
         });
         return out;
       }
@@ -1772,10 +1772,9 @@
         const pre = m[1].toUpperCase();
         const hex = c => c.codePointAt(0).toString(16).toUpperCase();
         [1, 2, 3, 4].forEach(lv => allKanjiList[lv].forEach(c => { if (hex(c).startsWith(pre)) out.add(c); }));
-        if (mjmap) mjmap.mj.forEach(x => {
-          if (!x[1] || !x[1].toUpperCase().replace(/^0+/, "").startsWith(pre.replace(/^0+/, ""))) return;
-          out.add(cp(x[1]));
-          if (x[2]) out.add(cp(x[1]) + cp(x[2]));
+        if (mjmap) mjmap.mj.forEach((x, i) => {
+          if (!x[1] || !hex(mjBase[i]).startsWith(pre)) return;
+          out.add(mjBase[i]); out.add(x[1]);
         });
         return out;
       }
@@ -1826,8 +1825,8 @@
         if (!m[1]) return;
         const to = candByMj.get(i);
         if (to && to.some(([ji]) => charLevel.has(jisCh[ji]))) return;
-        if (SYMBOL_CHARS.has(cp(m[1]) + (m[2] ? cp(m[2]) : ""))) return; // 記号は外字に出さない
-        seen.add(cjkBlock(parseInt(m[1], 16)));
+        if (SYMBOL_CHARS.has(m[1])) return; // 記号は外字に出さない
+        seen.add(cjkBlock(m[1].codePointAt(0)));
       });
       const g = document.createElement("optgroup");
       g.label = "MJ外字";
@@ -1885,11 +1884,21 @@
       checkIPAmjFont();
       wireSync();
       // 前回読ませた mjmap.json が残っていればファイル選択なしで復元する。
-      // 無ければ同じ場所に置かれた mjmap.json を取りに行く（file:// では失敗するのでその時は手動選択）
+      // 無ければ同じ場所に置かれた mjmap.json を取りに行く。
+      // file:// のページはオリジンを持たない扱いなので、同じフォルダに置いてあっても
+      // fetch は止められ、IndexedDB も http:// で保存したぶんは見えない。
+      // 黙って未読込のままにすると理由が分からないので、その場合は手動選択を促す。
       idb('readonly', s => s.get('mjmap'))
         .then(t => t ? { t, src: 'idb' } : fetch('mjmap.json').then(r => r.ok ? r.text() : null).then(t => t && { t, src: 'fetch' }))
-        .then(r => { if (r) loadMjmap(r.t, r.src); })
-        .catch(() => {});
+        .catch(() => null)
+        .then(r => {
+          if (r) return loadMjmap(r.t, r.src);
+          const why = /^https?:$/.test(location.protocol)
+            ? 'mjmap.json が見つかりません'
+            : `${location.protocol}// で開いているため mjmap.json を自動で読めません`;
+          setDataState(false, why + '。クリックして mjmap.json を選んでください');
+          el('mjmapStatus').textContent = why + '。「データ」から mjmap.json を選ぶか、ローカルサーバ経由で開いてください';
+        });
     };
   </script>
 </body>
