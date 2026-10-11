@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""IDS(漢字構成記述列) から部首フィルタの索引を作り、app.js と mjmap.json へ書き戻す。
+"""IDS(漢字構成記述列) から部品の枠の束に並べるチップ（位置ごとの部品の並びと読み）を作り、app.js へ書き戻す。
 
   python3 tools/build_radicals.py ids.txt --html app.js --mjmap mjmap.json
+
+どの字が当たるかは parts.js が IDS から実行時に決める（tools/build_parts.py）。ここで決めるのは、
+束に最初から並べる部品とその順だけ。mjmap.json は対象字を知るために読み、以前置いていた
+外字ぶんの部首索引（radicals）は消して書き戻す。
 
 ids.txt は CHISE IDS Database / CJKVI IDS。`U+XXXX <tab> 字 <tab> IDS [<tab> 地域別異体[GTJKV]]`。
 標準ライブラリのみで読む。ソースデータはリポジトリに入れず引数で渡す（build-mjmap.py と同じ）。
@@ -195,7 +199,7 @@ def load_bushu(path, idx):
     return out
 
 
-def build(ids, jis_chars, gaiji_chars):
+def build(ids, jis_chars):
     idx = collections.defaultdict(lambda: collections.defaultdict(set))
     compound = 0
     for ch in jis_chars:
@@ -216,8 +220,8 @@ def build(ids, jis_chars, gaiji_chars):
             kangxi.add(n)
     kangxi |= {v for v in VARIANTS if VARIANTS[v] in kangxi}
 
-    # 位置の並びは POS のまま（一覧の見出しの並びになる）。部品は多い順
-    # 字書の部の立て方を重ねる。位置はIDSのままなので、岩は かんむり/山 と へん/山 の両方に出る
+    # 位置の並びは POS のまま（束の見出しの並びになる）。部品は多い順
+    # 字書の部の立て方は、どの部品を「呼び名のある部首」として先に並べるかにだけ使う
     real = load_bushu(BUSHU_JSON, idx)
     for (pos, c), (_, chars) in real.items():
         idx[pos][c] |= chars & set(jis_chars)
@@ -233,91 +237,59 @@ def build(ids, jis_chars, gaiji_chars):
              for pos in POS}
     n_real = {pos: sum(1 for c in cs if (pos, c) in real) for pos, cs in chips.items()}
 
-    # IDSが原子（部品を持たない 一 木 山 口 …）の字は、自分自身が部品になっている所へ入れる
-    selfref = 0
-    for ch in jis_chars:
-        if split_args(ids.get(ch, ''))[0] is not None:
-            continue
-        for pos, cs in chips.items():
-            if ch in cs:
-                idx[pos][ch].add(ch)
-                selfref += 1
-
-    table = {pos: {c: ''.join(sorted(idx[pos][c])) for c in cs if idx[pos][c]}
-             for pos, cs in chips.items() if cs}
-
-    # 外字は mjmap.json 側に置く。inline に足すと app.js が155KB膨らむ
-    gai = collections.defaultdict(lambda: collections.defaultdict(list))
-    for ch in gaiji_chars:
-        for pos, cs in components(ids, ch).items():
-            for c in cs:
-                if c in table.get(pos, ()):
-                    gai[pos][c].append(ch)
-    gaiji = {pos: {c: ''.join(gai[pos][c]) for c in chips[pos] if gai[pos].get(c)}
-             for pos in POS if gai.get(pos)}
-
     reading_of, by_pos = build_readings()
     readings = {pos: {c: (real[(pos, c)][0] if (pos, c) in real
                           else by_pos.get((pos, c)) or reading_of[c])
                       for c in cs if (pos, c) in real or by_pos.get((pos, c)) or c in reading_of}
-                for pos, cs in table.items()}
-    return table, gaiji, readings, n_real, compound, selfref
+                for pos, cs in chips.items() if cs}
+    chips = {pos: cs for pos, cs in chips.items() if cs}
+    return chips, idx, readings, n_real, compound
 
 
-def js_block(table, readings, n_real):
-    def obj(d, indent):
-        pad = ' ' * indent
-        rows = [f'{pad}  {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)},'
-                for k, v in d.items()]
-        return '{\n' + '\n'.join(rows) + '\n' + pad + '}'
+def js_block(chips, readings, n_real):
     out = [MARK_BEGIN,
-           '    /* 部首データ。tools/build_radicals.py が IDS(CHISE IDS Database / CJKVI IDS) から作る。',
-           '       位置 -> 部品 -> その位置にその部品を持つ第1〜4水準の字。部品は IDS が返す位置別の字体',
-           '       （亻 氵 扌 忄 灬 衤 …）なので、チップはこのキーをそのまま1文字出すだけでよい。',
-           '       MJ外字ぶんは量が多いので mjmap.json の radicals に置いてある。 */',
-           '    const KANJI_RADICALS = {']
-    for pos, d in table.items():
-        out.append(f'      {json.dumps(pos, ensure_ascii=False)}: {obj(d, 6)},')
+           '    /* 部品の枠の束に最初から並べる部品。tools/build_radicals.py が IDS(CHISE IDS Database / CJKVI IDS) から作る。',
+           '       位置 -> 部品の並び。部品は IDS が返す位置別の字体（亻 氵 扌 忄 灬 衤 …）なので、そのまま1文字出せばよい。',
+           '       どの字が当たるかは parts.js が決める。 */',
+           '    const RADICAL_CHIPS = {']
+    for pos, cs in chips.items():
+        out.append(f'      {json.dumps(pos, ensure_ascii=False)}: {json.dumps(cs, ensure_ascii=False)},')
     out.append('    };')
-    out.append('    // 部品 -> 読み。チップは部品そのものを出し、読みは title に回す（阝のように位置で変わる）')
+    out.append('    // 部品 -> 読み。チップは部品そのものを出し、読みは title と入力の照合に回す（阝のように位置で変わる）')
     out.append('    const RADICAL_READING = {')
     for pos, d in readings.items():
         out.append(f'      {json.dumps(pos, ensure_ascii=False)}: {json.dumps(d, ensure_ascii=False)},')
     out.append('    };')
     out.append('    // 位置ごとの、先頭から何個が伝統的な呼び名を持つ部首か。残りはIDSの構成部品')
     out.append('    const RADICAL_REAL = ' + json.dumps(n_real, ensure_ascii=False) + ';')
+    out.append('    // 位置別の字体 -> 親の康熙部首。部首の入力欄で 人 と打っても 亻 に当てるのに使う')
+    out.append('    const RADICAL_FAMILY = ' + json.dumps(VARIANTS, ensure_ascii=False) + ';')
     out.append('    ' + MARK_END)
     return '\n'.join(out)
 
 
 def apply(ids_path, html_path, mm):
-    """mm（mjmap.json の中身）の字を対象に索引を作り、水準字ぶんを html_path の
-    radicals ブロックへ書き戻し、外字ぶんを mm['radicals'] に入れる。統計を stderr に出す。"""
+    """mm（mjmap.json の中身）の水準字を対象にチップを選び、html_path の radicals ブロックへ書き戻す。
+    mm に以前の外字ぶんの部首索引（radicals）が残っていれば消す。統計を stderr に出す。"""
     ids = read_ids(ids_path)
     # 対象字は mjmap.json から取る。jis は面区点を持つ10,054字で、記号を除くと第1〜4水準になる
     jis_chars = sorted({c for _, c in mm['jis'] if c not in SYMBOLS})
-    gaiji_chars = sorted({m[1][0] for m in mm['mj'] if m[1]} - set(jis_chars) - SYMBOLS)
-    table, gaiji, readings, n_real, compound, selfref = build(ids, jis_chars, gaiji_chars)
+    chips, idx, readings, n_real, compound = build(ids, jis_chars)
 
     html = open(html_path, encoding='utf-8').read()
-    block = js_block(table, readings, n_real)
+    block = js_block(chips, readings, n_real)
     i, j = html.index(MARK_BEGIN), html.index(MARK_END) + len(MARK_END)
     open(html_path, 'w', encoding='utf-8').write(html[:i] + block.lstrip() + html[j:])
-    mm['radicals'] = gaiji
+    mm.pop('radicals', None)
 
-    chips = sum(len(d) for d in table.values())
+    total = sum(len(cs) for cs in chips.values())
     named = sum(len(d) for d in readings.values())
     nreal = sum(n_real.values())
-    cov = len({c for d in table.values() for v in d.values() for c in v})
-    gcov = len({c for d in gaiji.values() for v in d.values() for c in v})
-    print(f'{html_path}: チップ {chips}（伝統部首 {nreal} / IDSのみ {chips - nreal}・読みあり {named}）'
-          f' / 水準 {cov:,}/{len(jis_chars):,}字'
-          f' / 複合引数 {compound}箇所を展開 / 原子字の自己登録 {selfref}\n'
-          f'外字 {gcov:,}/{len(gaiji_chars):,}字', file=sys.stderr)
-    for pos in POS:
-        d = table.get(pos, {})
-        print(f'  {pos}: {len(d)}種（伝統 {n_real.get(pos, 0)}） / のべ {sum(len(v) for v in d.values()):,}字'
-              f' … {" ".join(f"{c}{len(v)}" for c, v in list(d.items())[:8])}', file=sys.stderr)
+    print(f'{html_path}: チップ {total}（伝統部首 {nreal} / IDSのみ {total - nreal}・読みあり {named}）'
+          f' / 複合引数 {compound}箇所を展開', file=sys.stderr)
+    for pos, cs in chips.items():
+        print(f'  {pos}: {len(cs)}種（伝統 {n_real.get(pos, 0)}） … '
+              f'{" ".join(f"{c}{len(idx[pos][c])}" for c in cs[:8])}', file=sys.stderr)
 
 
 def main():
