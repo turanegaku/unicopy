@@ -135,7 +135,7 @@ def read_kyuujitai(path):
 def build(xlsx_path, shrink_path, kyuujitai):
     with zipfile.ZipFile(xlsx_path) as z:
         shared = read_shared_strings(z)
-        mj, index_of, own, zero = [], {}, {}, {}
+        mj, index_of, own, zero, impl_of = [], {}, {}, {}, {}
         for r in read_rows(z, shared):
             name = r['mj']
             ucs = r.get('ucs', '')
@@ -147,6 +147,8 @@ def build(xlsx_path, shrink_path, kyuujitai):
                 # 「実装したUCS」が入っているものだけに絞って正字を1つに決める（下の rep_of）。
                 if r.get('houhsetsu') == '0':
                     zero.setdefault(r['x0213'], []).append((name, bool(r.get('impl'))))
+                if r.get('impl'):
+                    impl_of.setdefault(r['x0213'], []).append(name)
             sel = ivs_selector(r.get('ivs'), ucs, name)
             ch = chr(int(ucs[2:], 16)) if ucs else ''
             mj.append([int(name[2:]), ch + (chr(int(sel, 16)) if sel else '')])
@@ -154,10 +156,15 @@ def build(xlsx_path, shrink_path, kyuujitai):
     # 面区点ごとの正字。「実装したUCS」が入っている区分0を採る。愛(1-16-06) なら
     # 実装したUCSを持つ MJ011752 だけが残り、MJ011751(E0102) は落ちる。
     # 実装したUCSを持つ区分0が1つも無い面区点が41あるので、そこは区分0が1つしか
-    # 無ければそれを使う（3面区点だけ絞りきれずに複数残る）。
+    # 無ければそれを使う。
+    # それでも決まらない面区点が3つある（翫 1-20-69・甑 1-25-89・冤 1-49-45）。区分0の行が
+    # どれも実装したUCSを持たず、実装したUCSを持つ行は区分2。正字が無いと、包摂・統合を外したときに
+    # その面区点の字形がすべて外字へ落ちるので、実装したUCSを持つ行（区分を問わない）を正字にする。
+    # 逆に、実装したUCSを持つ区分0が別々の符号位置で2つ以上ある面区点が11ある（吉 と 𠮷、汨 と 汩 など）。
+    # 一覧表がどちらも区分0としているので、両方を正字のまま残す。
     rep_of = {}
     for code, rows in zero.items():
-        impl = [n for n, has in rows if has] or ([rows[0][0]] if len(rows) == 1 else [])
+        impl = [n for n, has in rows if has] or ([rows[0][0]] if len(rows) == 1 else []) or impl_of.get(code, [])
         for n in impl:
             rep_of[n] = code
 
