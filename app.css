@@ -61,11 +61,17 @@
     .finder-side .find-row { grid-template-columns: 1fr; }
     .pbox-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
     /* 周りの余白は、入れた部品のチップを枠の外の四方に置く場所。部品を入れても枠が動かないよう常に空けておく */
+    /* 上下の余白は冠・脚のチップの置き場所。入れ外しで余白を変えると、すべて外した瞬間に下の行が飛び、
+       「元に戻す」がカーソルの下から逃げるので、常に空けておく */
     .pbox { position: relative; margin: 56px 92px; }
+    /* ホバー中の位置の名前と「すべて外す」を枠の下の1行に置く。左右を固定の枠に分け、名前は右寄せ、
+       ボタンは左寄せにして、どちらの文字が変わってももう片方は動かない */
+    .pbox-status { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; min-height: 32px; width: 100%; }
+    .pbox-status .pbox-label { text-align: right; }
     .pbox-hit { padding: 16px; cursor: crosshair; touch-action: manipulation; }
     .pbox-frame { position: relative; width: 176px; height: 176px; background: var(--surface); border: 1px solid var(--line-strong); }
     .pbox-frame svg { position: absolute; inset: 0; width: 176px; height: 176px; }
-    .pbox-guides { stroke: var(--line); stroke-width: 1; fill: none; display: none; }
+    .pbox-guides { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; fill: none; display: none; }
     .pbox-fills path { fill: rgba(52, 152, 219, 0.10); fill-rule: evenodd; }
     .pbox-shape { fill: rgba(52, 152, 219, 0.12); stroke: var(--main); stroke-width: 2; stroke-dasharray: 5 4; fill-rule: evenodd; }
     /* 入れた部品と他の候補。位置ごとに置き場所を固定し、枠の端に揃える（中央に揃えると、候補の数が
@@ -108,9 +114,15 @@
     /* SVG の要素には HTML の [hidden] の既定が効かない */
     .pbox-shape[hidden] { display: none; }
     .pbox-glyphs span { position: absolute; transform: translate(-50%, -50%); font-family: "Noto Serif JP", serif; line-height: 1; color: var(--heading); pointer-events: none; }
-    /* 空の枠の案内。区画の名前を、その区画の場所に薄く置く（入力欄の placeholder と同じ役） */
-    .pbox-hint span { position: absolute; transform: translate(-50%, -50%); font-size: var(--fs-2); line-height: 1; color: var(--faint); pointer-events: none; }
-    .pbox-hint span.small { font-size: var(--fs-1); }
+    /* 空の枠の案内。各区画に入る部品の見本を薄く置き、区画の線も出す（入力欄の placeholder と同じ役） */
+    .pbox-hint span { position: absolute; transform: translate(-50%, -50%); font-family: "Noto Serif JP", serif; line-height: 1; color: var(--line-strong); pointer-events: none; }
+    .pbox-frame.empty .pbox-guides { display: inline; }
+    /* 構は枠の外側 16px でも指せる。空の枠ではその範囲も点線で示す */
+    .pbox-hit { position: relative; }
+    .pbox-halo { display: none; position: absolute; inset: 0; border: 1px dashed var(--line-strong); pointer-events: none; }
+    .pbox-hit:has(.pbox-frame.empty) .pbox-halo { display: block; }
+    .pbox-clear { display: flex; gap: 8px; align-items: center; min-height: 32px; }
+    .pbox-clear .note { font-size: var(--fs-1); color: var(--muted); }
     /* キーボード用の区画ボタン。どこを指しているかは点線のプレビューが見せるので、ボタン自体は見せない */
     .pbox-keys button { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
     .pbox-frame:has(.pbox-keys button:focus-visible) { outline: 2px solid var(--main); outline-offset: 2px; }
