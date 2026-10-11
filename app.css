@@ -379,8 +379,31 @@
     body.list-off #kanjiContainer { display: none; }
     body.list-off #kanjiPanes { justify-content: center; }
 
+    /* 狭い画面ではツリー（5列で 470px）を一覧の横に置けない。束と同じく下から出るシートにし、
+       開いているあいだは一覧をシートの上の残りの高さに縮める。カードをタップした字の行へ送って開く */
+    #treeClose { display: none; }
+    @media (max-width: 640px) {
+      body.tree-on:not(.list-off) #treePane, body.tree-on:not(.list-off) #treeClose { position: fixed; left: 0; right: 0; z-index: 35; transform: translateY(calc(50vh + 40px)); transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
+      body.tree-on:not(.list-off) #treePane { bottom: 0; height: 50vh; border-width: 0; overscroll-behavior: contain; }
+      body.tree-on:not(.list-off) #treeClose { bottom: 50vh; height: 40px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border: none; border-top: 1px solid var(--line-strong); background: var(--surface); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12); color: var(--muted); font: inherit; font-size: var(--fs-2); cursor: pointer; }
+      body.tree-on:not(.list-off) #treeClose span:first-child { font-weight: bold; color: var(--heading); }
+      body.tree-on.tree-sheet:not(.list-off) #treePane, body.tree-on.tree-sheet:not(.list-off) #treeClose { transform: none; }
+      /* 一覧はページのまま流す（app.js の listScrolls）。貼り付けて中でスクロールさせると、
+         全幅の一覧がスワイプを全部受けて、上の枠や設定へ戻れなくなる */
+      body.tree-on:not(.list-off) #kanjiPanes { position: static; height: auto; }
+      body.tree-on:not(.list-off) #kanjiContainer { overflow: visible; }
+      /* シートのぶん下に余白を足す。足さないと一覧の最後の行がシートの裏から出てこない */
+      body.tree-on.tree-sheet:not(.list-off) #kanjiPanes { margin-bottom: calc(50vh + 40px); }
+    }
+    @media (prefers-reduced-motion: reduce) { #treePane, #treeClose { transition: none; } }
+    /* 長押しを右クリックとして使うので、iOS の長押しの吹き出しを出さない */
+    #kanjiContainer, #treePane { -webkit-touch-callout: none; }
     .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-1); color: var(--muted); }
     .tree-head div { text-align: center; padding: 6px 0; }
+    /* 行の無い字へ送ったときの断り書き。見出しと一緒に貼り付け、横に送っても左端に残す */
+    .tree-head { flex-wrap: wrap; }
+    .tree-head .tree-note { position: sticky; left: 0; box-sizing: border-box; width: 100%; max-width: 100vw; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--main-soft); color: var(--fg); text-align: left; font-size: var(--fs-1); }
+    .tree-head .tree-note[hidden] { display: none; }
     .tree-head div.foc { color: var(--heading); background: var(--main-soft); font-weight: bold; }
     #treeBody { position: relative; }
     .tree-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line-faint); }
