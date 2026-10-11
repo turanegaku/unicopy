@@ -26,7 +26,11 @@
         color-scheme: dark;
       }
     }
-    body { font-family: "Noto Sans JP", sans-serif; font-size: var(--fs-2); max-width: 1200px; margin: 0 auto; padding: 24px 16px; color: var(--fg); background: var(--base); }
+    /* 横方向のはみ出しは切る。束や候補が画面の端から少し出ても、ページが横に送られて全体が寄らないように。
+       hidden と違ってスクロール領域を作らないので、貼り付く帯（sticky）はそのまま効く */
+    html, body { overflow-x: clip; }
+    /* 幅は画面いっぱいに使う（一覧の列数は幅に合わせて増える） */
+    body { font-family: "Noto Sans JP", sans-serif; font-size: var(--fs-2); margin: 0; padding: 24px 16px; color: var(--fg); background: var(--base); }
     /* タイトルとタブはページの顔なので、2つまとめて中央に置く（片方だけ中央にすると揃えの軸が2本になる）。
        その下の帯・一覧は左端を1本に揃える */
     h1 { text-align: center; color: var(--heading); font-size: var(--fs-4); line-height: 1.3; margin: 0 0 16px; text-wrap: balance; word-break: auto-phrase; }
@@ -144,18 +148,21 @@
     @media (hover: none) { .pbox-guides { display: inline; } }
 
     /* 束。指した位置の側に枠へ重ねて開く（流れに入れると枠がずれ、カーソルが枠から外れる）。
+       上端に貼り付くタブ（31）と移動の行（30）より前に出す。
        重なって前に出る面なので、候補リストと同じく影を付ける */
-    .palette { position: absolute; z-index: 20; width: 272px; max-height: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
+    .palette { position: absolute; z-index: 40; width: 272px; max-height: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
     .palette[hidden] { display: none; }
     /* 束を画面に入れるとき（scrollIntoView）、上端に貼り付いた帯の下に出す */
     .palette { scroll-margin-top: calc(var(--nav-h) + 8px); }
     /* 開く方向から少し寄ってきて止まる。どこから出た束かが動きで分かる（原則10）。開くときだけ動かす */
     .palette { opacity: 0; transition: opacity 0.12s, translate 0.12s cubic-bezier(.2, 0, 0, 1); }
     .palette.open { opacity: 1; translate: 0 0; }
-    .palette[data-side="left"]:not(.open) { translate: 8px 0; }
-    .palette[data-side="right"]:not(.open) { translate: -8px 0; }
-    .palette[data-side="top"]:not(.open) { translate: 0 8px; }
-    .palette[data-side="bottom"]:not(.open) { translate: 0 -8px; }
+    @media (min-width: 641px) {
+      .palette[data-side="left"]:not(.open) { translate: 8px 0; }
+      .palette[data-side="right"]:not(.open) { translate: -8px 0; }
+      .palette[data-side="top"]:not(.open) { translate: 0 8px; }
+      .palette[data-side="bottom"]:not(.open) { translate: 0 -8px; }
+    }
     .palette[data-side="left"]  { right: calc(100% + 8px); top: 0; }
     .palette[data-side="right"] { left: calc(100% + 8px); top: 0; }
     .palette[data-side="left"][data-align="bottom"] { top: auto; bottom: 0; }
@@ -186,7 +193,10 @@
        位置と方向の対応は、どこから入ってくるかで保つ */
     @media (max-width: 640px) {
       .palette, .palette:not(.open) { position: fixed; width: auto; max-height: none; opacity: 1; translate: none; transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
-      .palette[data-side="left"], .palette[data-side="left"][data-align] { top: 0; bottom: 0; left: 0; right: auto; width: min(320px, 88vw); transform: translateX(-100%); }
+      .palette[data-side="left"] { top: 0; bottom: 0; left: 0; right: auto; width: min(320px, 88vw); transform: translateX(-100%); }
+      /* デスクトップの垂・繞の上下寄せ（[data-align]）は打ち消すだけにする。ここで transform まで書くと、
+         詳細度が .open より高くなり、開いても画面の外に残る */
+      .palette[data-side="left"][data-align] { top: 0; bottom: 0; }
       .palette[data-side="right"]  { top: 0; bottom: 0; right: 0; left: auto; width: min(320px, 88vw); transform: translateX(100%); }
       .palette[data-side="top"]    { top: 0; left: 0; right: 0; bottom: auto; width: auto; max-height: 70vh; transform: translateY(-100%); }
       .palette[data-side="bottom"] { bottom: 0; left: 0; right: 0; top: auto; width: auto; max-height: 70vh; transform: translateY(100%); }

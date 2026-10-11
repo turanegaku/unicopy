@@ -564,12 +564,22 @@
       // 左に開く束は右端を基準に置いているので、寄せるのも右側の余白で行う
       // （狭い画面の束は画面に貼り付くパネルなので寄せない）
       if (getComputedStyle(pal).position === 'absolute') {
+        // 開く動きの起点（閉じた位置の 8px のずれ）を外して、開ききった位置で測る。
+        // translate には動きを付けてあるので、動きも止めないと外した瞬間はまだ元の位置で測れてしまう
+        pal.style.transition = 'none';
+        pal.style.translate = 'none';
         const r = pal.getBoundingClientRect(), m = 8;
+        pal.style.translate = '';
+        void pal.offsetWidth;
+        pal.style.transition = '';
         const dx = Math.max(m - r.left, 0) - Math.max(r.right - (document.documentElement.clientWidth - m), 0);
         if (dx && pal.dataset.side === 'left') pal.style.marginRight = `${-dx}px`;
         else if (dx) pal.style.marginLeft = `${dx}px`;
       }
-      requestAnimationFrame(() => pal.classList.add('open'));
+      // 閉じた位置を一度確定させてから open を付け、開く動きを出す。requestAnimationFrame に任せると、
+      // 描画が止まっている間（裏に回ったタブなど）に付かず、束が画面の外に置かれたままになる
+      void pal.offsetWidth;
+      pal.classList.add('open');
       pal.querySelector('.pal-close').onclick = closePalette;
       const clr = pal.querySelector('.pal-clear');
       if (clr) clr.onclick = () => setSlot(pos, null);
@@ -584,8 +594,13 @@
       fillPalette();
       preview(pos);
       if (focus) find.focus({ preventScroll: true });
-      // 冠の束は枠の上に開くので、枠が画面の上の方にあると切れる。束が収まるところまで送る
-      pal.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      // 冠の束は枠の上に開くので、枠が画面の上の方にあると切れる。束が収まるところまで縦にだけ送る
+      // （scrollIntoView は横にも送り、旁の束で画面ごと右へ寄ってしまう）
+      if (getComputedStyle(pal).position === 'absolute') {
+        const r = pal.getBoundingClientRect(), top = navH() + 8, bottom = innerHeight - 8;
+        if (r.top < top) window.scrollBy(0, r.top - top);
+        else if (r.bottom > bottom) window.scrollBy(0, Math.min(r.bottom - bottom, r.top - top));
+      }
     }
     function closePalette() {
       if (!palettePos) return;
