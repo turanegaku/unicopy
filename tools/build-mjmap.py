@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """MJ文字情報一覧表(xlsx) と MJ縮退マップ(json) を index.html 用の 1 ファイルに統合する。
 
-  python3 tools/build-mjmap.py mji.00602.xlsx MJShrinkMap.1.2.0.json --ids ids.txt -o mjmap.json
+  python3 tools/build-mjmap.py mji.00602.xlsx MJShrinkMap.1.2.0.json --ids ids.txt --unihan Unihan.zip -o mjmap.json
 
 --ids を渡すと、tools/build_radicals.py で部首索引（app.js の水準字ぶん・mjmap.json の外字ぶん）も作る。
+さらに --unihan を渡すと、tools/build_parts.py で部品の枠のデータ（parts.js・mjmap.json）も作る。
 
 xlsx は字形(IVS)を、縮退マップは縮退グラフを持つ。両者は MJ文字図形名で 1:1 に対応する。
 標準ライブラリのみで読む。この xlsx は strict OOXML なので名前空間が通常と違う点に注意。
@@ -250,6 +251,7 @@ def main():
     p.add_argument('shrink', help='MJ縮退マップ (MJShrinkMap.*.json)')
     p.add_argument('-o', '--out', default='mjmap.json')
     p.add_argument('--ids', help='IDSファイル (ids.txt)。渡すと部首索引も作る（tools/build_radicals.py）')
+    p.add_argument('--unihan', help='Unihan.zip。--ids と一緒に渡すと部品の枠のデータも作る（tools/build_parts.py）')
     a = p.parse_args()
 
     data = build(a.xlsx, a.shrink, read_kyuujitai(KYUUJITAI_MD))
@@ -260,6 +262,12 @@ def main():
         sys.path.insert(0, str(here))
         import build_radicals
         build_radicals.apply(a.ids, str(here.parent / 'app.js'), data)
+        # 部品の枠も外字ぶん（ids / dictRadicals）を mjmap.json に持つので、部首索引と同じ理由でここで足す
+        if a.unihan:
+            import build_parts
+            build_parts.apply(a.ids, a.unihan, str(here.parent / 'parts.js'), data)
+        else:
+            print(f'warn: --unihan を渡していないので {a.out} に部品の枠のデータが無い', file=sys.stderr)
     else:
         print(f'warn: --ids を渡していないので {a.out} に部首索引が無い', file=sys.stderr)
     with open(a.out, 'w', encoding='utf-8') as f:
