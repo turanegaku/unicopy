@@ -146,27 +146,12 @@ def build(xlsx_path, shrink_path, kyuujitai):
                 # 1つの面区点に複数あることがあるので（10,909件／10,054面区点）、
                 # 「実装したUCS」が入っているものだけに絞って正字を1つに決める（下の rep_of）。
                 if r.get('houhsetsu') == '0':
-                    zero.setdefault(r['x0213'], []).append((name, bool(r.get('impl'))))
+                    zero.setdefault(r['x0213'], []).append((name, r.get('impl', '')))
                 if r.get('impl'):
                     impl_of.setdefault(r['x0213'], []).append(name)
             sel = ivs_selector(r.get('ivs'), ucs, name)
             ch = chr(int(ucs[2:], 16)) if ucs else ''
             mj.append([int(name[2:]), ch + (chr(int(sel, 16)) if sel else '')])
-
-    # 面区点ごとの正字。「実装したUCS」が入っている区分0を採る。愛(1-16-06) なら
-    # 実装したUCSを持つ MJ011752 だけが残り、MJ011751(E0102) は落ちる。
-    # 実装したUCSを持つ区分0が1つも無い面区点が41あるので、そこは区分0が1つしか
-    # 無ければそれを使う。
-    # それでも決まらない面区点が3つある（翫 1-20-69・甑 1-25-89・冤 1-49-45）。区分0の行が
-    # どれも実装したUCSを持たず、実装したUCSを持つ行は区分2。正字が無いと、包摂・統合を外したときに
-    # その面区点の字形がすべて外字へ落ちるので、実装したUCSを持つ行（区分を問わない）を正字にする。
-    # 逆に、実装したUCSを持つ区分0が別々の符号位置で2つ以上ある面区点が11ある（吉 と 𠮷、汨 と 汩 など）。
-    # 一覧表がどちらも区分0としているので、両方を正字のまま残す。
-    rep_of = {}
-    for code, rows in zero.items():
-        impl = [n for n, has in rows if has] or ([rows[0][0]] if len(rows) == 1 else []) or impl_of.get(code, [])
-        for n in impl:
-            rep_of[n] = code
 
     with open(shrink_path, encoding='utf-8') as f:
         shrink = json.load(f)
@@ -177,6 +162,24 @@ def build(xlsx_path, shrink_path, kyuujitai):
         for key in SRC_KEYS:
             for c in item.get(key, []):
                 jis_ucs.setdefault(c['JIS X 0213'], c['UCS'][2:])
+    # 面区点ごとの正字。「実装したUCS」が入っている区分0を採る。愛(1-16-06) なら
+    # 実装したUCSを持つ MJ011752 だけが残り、MJ011751(E0102) は落ちる。
+    # 実装したUCSを持つ区分0が1つも無い面区点が41あるので、そこは区分0が1つしか
+    # 無ければそれを使う。
+    # それでも決まらない面区点が3つある（翫 1-20-69・甑 1-25-89・冤 1-49-45）。区分0の行が
+    # どれも実装したUCSを持たず、実装したUCSを持つ行は区分2。正字が無いと、包摂・統合を外したときに
+    # その面区点の字形がすべて外字へ落ちるので、実装したUCSを持つ行（区分を問わない）を正字にする。
+    # 逆に、実装したUCSを持つ区分0が別々の符号位置で2つ以上ある面区点が11ある（吉 と 𠮷、汨 と 汩 など）。
+    # 面区点そのものの符号位置（吉 1-21-40 なら U+5409）と一致する字形だけを正字にし、𠮷 は包摂で繋がる字形として扱う
+    # （どれも縮退マップの包摂規準のエッジを持つので、包摂を選べば今までどおり繋がる）。
+    rep_of = {}
+    for code, rows in zero.items():
+        impl = [n for n, u in rows if u] or ([rows[0][0]] if len(rows) == 1 else []) or impl_of.get(code, [])
+        if len(impl) > 1 and code in jis_ucs:
+            impl = [n for n, u in rows if u == 'U+' + jis_ucs[code]] or impl
+        for n in impl:
+            rep_of[n] = code
+
     jis = sorted(jis_ucs)
     jis_idx = {code: i for i, code in enumerate(jis)}
     jis_ch = {code: chr(int(h, 16)) for code, h in jis_ucs.items()}
