@@ -210,6 +210,7 @@
       document.getElementById(tabId).classList.add('active');
       event.target.classList.add('active');
       if (tabId === 'kanji') relayout(); // 隠れているあいだは幅0で測れないので、戻った時に引き直す
+      syncNavH(); // 貼り付く移動の段はモードごとに別なので、高さを取り直す
     }
 
     // --- 漢字モードのUI制御 ---
@@ -232,15 +233,21 @@
     };
     // 入れた部品を描く場所（中心）と大きさ。偏や旁は半分いっぱいに、縁の位置は小さく
     const SIDE_SKIP = ['一', '丨', '丶', '丿', '乙', '亅'];
+    // 空の枠に薄く置く、各区画に入る部品の見本
+    const SLOT_SAMPLE = { 'へん': '亻', 'つくり': '攵', 'かんむり': '艹', 'あし': '灬', 'たれ': '广', 'にょう': '辶', 'かまえ': '門' };
+    // 入れた部品のチップを置く場所。偏・旁・冠・脚は枠の辺の外、垂・繞・構・中身は角の外
+    const SIDE_SPOT = { 'へん': 'l', 'つくり': 'r', 'かんむり': 't', 'あし': 'b', 'たれ': 'tl', 'にょう': 'bl', 'かまえ': 'tr', 'なかみ': 'br' };
     /* 形が似ていて取り違えやすい部品の組。干 のつもりで 宇（⿱宀于）を探して当たらない、を避ける。
        形の似た部品の公開データは見当たらないので手で持つ。足すときは 1 組 1 文字列 */
     const SIMILAR_PARTS = ['干于千', '土士', '未末', '己已巳', '日曰', '刀力', '人入八', '天夭', '王玉主壬',
       '冫氵', '礻衤', '采釆', '戊戌戍戎', '母毋', '瓜爪', '鳥烏', '大犬太', '失矢', '牛午', '夂夊',
       '卯夘', '旦且', '兔免', '貝見', '爿片', '厂广', '冂冖', '亠宀', '朩木', '儿几'];
     const similarOf = p => { const g = SIMILAR_PARTS.find(g => Array.from(g).includes(p)); return g ? Array.from(g).filter(c => c !== p) : []; };
+    // 区画の範囲の中心に、区画に収まる大きさで描く（偏は左端の縦帯 24px を除いた 24〜88、冠・脚は角を除いた
+    // 44〜152 の帯、垂・繞は 44px 角、構は右の角 24×44）
     const SLOT_GLYPH = {
-      'へん': [44, 88, 56], 'つくり': [132, 88, 56], 'かんむり': [88, 26, 32], 'あし': [88, 150, 32],
-      'たれ': [22, 22, 22], 'にょう': [22, 154, 22], 'かまえ': [160, 22, 22],
+      'へん': [56, 88, 48], 'つくり': [132, 88, 56], 'かんむり': [98, 22, 32], 'あし': [98, 154, 32],
+      'たれ': [22, 22, 28], 'にょう': [22, 154, 28], 'かまえ': [164, 22, 20],
     };
 
     let slots = {};          // 位置 -> 部品（ぶしゅ は康熙部首の番号の文字列）
@@ -341,6 +348,7 @@
       area.innerHTML = `
         <div class="pbox" id="pbox">
           <div class="pbox-hit" id="pboxHit">
+            <div class="pbox-halo" aria-hidden="true"></div>
             <div class="pbox-frame" id="pboxFrame">
               <svg viewBox="0 0 176 176" aria-hidden="true">
                 <g class="pbox-fills" id="pboxFills"></g>
@@ -348,23 +356,34 @@
                 <path class="pbox-shape" id="pboxShape" d="" hidden></path>
               </svg>
               <div class="pbox-glyphs" id="pboxGlyphs" aria-hidden="true"></div>
+              <div class="pbox-hint" id="pboxHint" aria-hidden="true"></div>
               <div class="pbox-keys" id="pboxKeys" role="group" aria-label="部品の位置"></div>
             </div>
           </div>
           <div class="pbox-sides" id="pboxSides"></div>
           <div class="palette" id="partPalette" role="dialog" aria-modal="false" hidden></div>
         </div>
-        <div class="pbox-label" id="pboxLabel" aria-live="polite"></div>
+        <div class="pbox-status">
+          <div class="pbox-label" id="pboxLabel" aria-live="polite"></div>
+          <div class="pbox-clear" id="pboxClear"></div>
+        </div>
         <div class="pbox-extra">
           <button type="button" class="pbox-btn" data-pos="なし"></button>
           <button type="button" class="pbox-btn" data-pos="ぶしゅ"></button>
         </div>
         <div class="pbox-info" id="condBar" aria-live="polite"></div>
         <div class="char-parts" id="charParts" hidden></div>`;
-      wrap.appendChild(area);
-      wrap.appendChild(el('searchRow')); // 検索は枠の下に置く。外すのは枠外の条件の帯から
+      // 左に枠、右に検索・絞り込み・条件・件数。探す操作と、その結果の確かめを横に並べる
+      const finder = document.createElement('div');
+      finder.className = 'finder';
+      const side = document.createElement('div');
+      side.className = 'finder-side';
+      side.append(el('searchRow'), el('filterRow'), ...area.querySelectorAll('.pbox-extra, #condBar, #charParts'));
+      finder.append(area, side);
+      wrap.appendChild(finder);
 
-      area.querySelectorAll('.pbox-btn').forEach(b => { b.onclick = () => openPalette(b.dataset.pos); });
+      // 右の列へ移したあとなので、枠の中ではなく文書全体から探す
+      document.querySelectorAll('.pbox-btn').forEach(b => { b.onclick = () => openPalette(b.dataset.pos); });
       wirePbox();
       drawPbox();
     }
@@ -383,19 +402,52 @@
       const o = innerOrigin(enclosure());
       return o ? `M${o[0]} ${o[1]}h${BOX.inner}v${BOX.inner}h-${BOX.inner}Z` : '';
     }
+    /* 部品の字を、墨の中心が (x, y) に来るように置く。亻 は字の枠の左寄り、灬 は下寄り、艹 は上寄りに
+       作られているので、字の枠の中心で揃えると区画からずれて見える。墨の範囲は canvas で測る。
+       Web フォントが届く前の測り値は捨て、届いたら測り直して描き直す */
+    const inkCache = new Map();
+    let inkCtx = null;
+    function inkCenter(ch, size) {
+      const key = `${size}\t${ch}`;
+      if (inkCache.has(key)) return inkCache.get(key);
+      inkCtx = inkCtx || document.createElement('canvas').getContext('2d');
+      inkCtx.font = `${size}px "Noto Serif JP", serif`;
+      inkCtx.textAlign = 'center';
+      inkCtx.textBaseline = 'middle';
+      const m = inkCtx.measureText(ch);
+      const c = [(m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2, (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2];
+      if (!document.fonts || document.fonts.check(inkCtx.font, ch)) inkCache.set(key, c);
+      return c;
+    }
+    function glyphSpan(ch, x, y, size) {
+      const [dx, dy] = inkCenter(ch, size);
+      return `<span style="left:${(x - dx).toFixed(1)}px;top:${(y - dy).toFixed(1)}px;font-size:${size}px">${ch}</span>`;
+    }
+    if (document.fonts) document.fonts.addEventListener('loadingdone', () => { inkCache.clear(); if (el('pboxFrame')) drawPbox(); });
+
     function drawPbox() {
       const { size: S, band: B, strip: W, cornerW: CW, cornerH: CH } = BOX;
+      // 区画の線。垂・繞は当たり判定のとおり L 字の外形で引き、L の中（角と縦帯の間）には線を入れない。
+      // 垂と繞の境は 1 本だけ引く（2 本重ねると点線の位相がずれて実線に見える）。
+      // 冠・脚の帯の線は L 字の角の外から、構は右の角の四角
       el('pboxGuides').innerHTML =
-        `<path d="M0 ${B}H${W}V${S - B}H0"/><line x1="${B}" y1="0" x2="${B}" y2="${B}"/><line x1="${B}" y1="${S - B}" x2="${B}" y2="${S}"/>
-         <line x1="0" y1="${S / 2}" x2="${W}" y2="${S / 2}"/><line x1="${W}" y1="${B}" x2="${S - CW}" y2="${B}"/><line x1="${W}" y1="${S - B}" x2="${S - CW}" y2="${S - B}"/>
+        `<path d="M${B} 0V${B}H${W}V${S / 2}"/><line x1="0" y1="${S / 2}" x2="${W}" y2="${S / 2}"/><path d="M${W} ${S / 2}V${S - B}H${B}V${S}"/>
+         <line x1="${B}" y1="${B}" x2="${S - CW}" y2="${B}"/><line x1="${B}" y1="${S - B}" x2="${S - CW}" y2="${S - B}"/>
          <line x1="${S / 2}" y1="${B}" x2="${S / 2}" y2="${S - B}"/><path d="M${S - CW} 0V${CH}H${S}"/><path d="M${S - CW} ${S}V${S - CH}H${S}"/>`
         + (enclosure() ? `<path d="${innerPath()}"/>` : '');
+      el('pboxFrame').classList.toggle('empty', !Object.keys(slots).length);
       el('pboxFills').innerHTML = Object.keys(slots).filter(p => ZONE_SHAPE[p] || p === 'なかみ')
         .map(p => `<path d="${p === 'なかみ' ? innerPath() : ZONE_SHAPE[p]}"/>`).join('');
+      // 何も入れていないときは、入力欄の placeholder のように、各区画に入る部品の見本を薄く置く。
+      // 部品を入れたあとと同じ場所・同じ大きさに描くので、入れたあとの姿の予告になる
+      el('pboxHint').innerHTML = Object.keys(slots).length ? '' : Object.keys(SLOT_GLYPH).map(p => {
+        const [x, y, size] = SLOT_GLYPH[p];
+        return glyphSpan(SLOT_SAMPLE[p], x, y, size);
+      }).join('');
       const o = innerOrigin(enclosure());
       el('pboxGlyphs').innerHTML = Object.keys(slots).filter(p => SLOT_GLYPH[p] || p === 'なかみ').map(p => {
         const [x, y, size] = p === 'なかみ' ? [o[0] + BOX.inner / 2, o[1] + BOX.inner / 2, 32] : SLOT_GLYPH[p];
-        return `<span style="left:${x}px;top:${y}px;font-size:${size}px">${slots[p]}</span>`;
+        return glyphSpan(slots[p], x, y, size);
       }).join('');
       // キーボードでは区画をボタンとして順に移る。フォーカスした区画はホバーと同じく点線で見せる
       const keys = ['かんむり', 'たれ', 'へん', 'つくり', 'にょう', 'あし', 'かまえ', ...(enclosure() ? ['なかみ'] : [])];
@@ -414,12 +466,14 @@
         b.innerHTML = '<span class="g"></span><span class="n"></span>';
         b.querySelector('.g').textContent = part;
         b.querySelector('.n').textContent = n;
-        b.onclick = () => selected ? openPalette(pos, true) : setSlot(pos, part);
+        b.onclick = () => setSlot(pos, selected ? null : part);   // 選択中を押したらそのまま外す
         return b;
       };
-      Object.keys(slots).filter(p => SLOT_GLYPH[p] || p === 'なかみ').forEach(pos => {
-        const side = paletteSide(pos);
-        const list = lists[side] || (lists[side] = Object.assign(document.createElement('div'), { className: `side-list side-${side}` }));
+      Object.keys(slots).filter(p => SIDE_SPOT[p]).forEach(pos => {
+        // 置き場所は位置ごとに固定する。同じ側の位置（偏・垂・繞）を1つの入れ物にまとめると、
+        // どれかを入れ外しするたびに並びが組み直されて揺れる
+        const spot = SIDE_SPOT[pos];
+        const list = lists[spot] = Object.assign(document.createElement('div'), { className: `side-list side-${spot}` });
         const T = conditionChars(pos);
         list.appendChild(chip(pos, slots[pos], countIn(T, slotChars(pos, slots[pos])), true));
         // 先頭に形の似た部品（取り違えの直し先）、続けて呼び名のある部首を先に件数の多い順。
@@ -430,8 +484,10 @@
           .map(c => [c.part, countIn(T, slotChars(pos, c.part)), c.named]).filter(([, n]) => n)
           .sort((a, b) => (b[2] - a[2]) || (b[1] - a[1]));
         [...similar.map(([p, n]) => [p, n, true]), ...others.map(([p, n]) => [p, n, false])]
-          .slice(0, side === 'left' || side === 'right' ? 5 : 3)
+          .slice(0, { l: 10, r: 10, t: 2, b: 2, tl: 3, bl: 3, tr: 3, br: 3 }[spot])
           .forEach(([part, n, sim]) => list.appendChild(chip(pos, part, n, false, sim)));
+        // 角は 1 行しか置けないので「…」は付けない（すべての候補は枠のその区画を押して束で見る）
+        if (spot.length > 1) return;
         const more = Object.assign(document.createElement('button'), { type: 'button', className: 'side-more', textContent: '…' });
         more.title = `${slotTitle(pos)}の候補をすべて見る`;
         more.onclick = () => openPalette(pos, true);
@@ -503,6 +559,16 @@
         <div class="pal-chips" role="listbox" aria-label="${slotTitle(pos)}の部品"></div>
         <button type="button" class="pal-more" hidden></button>`;
       pal.hidden = false;
+      pal.style.marginLeft = pal.style.marginRight = '';
+      // 枠が左端にあると左に開く束（偏・垂・繞）が画面からはみ出す。はみ出すぶんだけ内側へ寄せる。
+      // 左に開く束は右端を基準に置いているので、寄せるのも右側の余白で行う
+      // （狭い画面の束は画面に貼り付くパネルなので寄せない）
+      if (getComputedStyle(pal).position === 'absolute') {
+        const r = pal.getBoundingClientRect(), m = 8;
+        const dx = Math.max(m - r.left, 0) - Math.max(r.right - (document.documentElement.clientWidth - m), 0);
+        if (dx && pal.dataset.side === 'left') pal.style.marginRight = `${-dx}px`;
+        else if (dx) pal.style.marginLeft = `${dx}px`;
+      }
       requestAnimationFrame(() => pal.classList.add('open'));
       pal.querySelector('.pal-close').onclick = closePalette;
       const clr = pal.querySelector('.pal-clear');
@@ -552,7 +618,7 @@
         b.setAttribute('role', 'option');
         b.setAttribute('aria-selected', slots[pos] === c.part);
         b.innerHTML = `<span class="g">${c.glyph}</span><span class="n">${n}</span>`;
-        b.onclick = () => setSlot(pos, c.part);
+        b.onclick = () => setSlot(pos, slots[pos] === c.part ? null : c.part);   // 選択中を押したらそのまま外す
         box.appendChild(b);
       });
       const more = pal.querySelector('.pal-more');
@@ -610,16 +676,32 @@
       add('span', 'n', `${total.toLocaleString()}字`);
       const note = gaijiState === 'building' ? '外字を索引中' : gaijiState === 'old' ? '外字は部品で引けません（mjmap.json が古い）' : '';
       if (note && Object.keys(slots).length) add('span', 'note', note);
+      // すべて外す・元に戻すは、操作の起点の枠のすぐ下に置く（右の列だと枠から遠い）
+      const clr = el('pboxClear');
+      clr.innerHTML = '';
+      const put = (tag, cls, text) => clr.appendChild(Object.assign(document.createElement(tag), { className: cls, textContent: text }));
       if (conds.length) {
-        const b = add('button', 'cond-clear', 'すべて外す');
+        const b = put('button', 'cond-clear', 'すべて外す');
         b.type = 'button';
         b.onclick = clearKanjiSearch;
       } else if (undoState) {
-        add('span', 'note', 'すべて外しました');
-        const b = add('button', 'cond-clear', '元に戻す');
+        // 「元に戻す」は「すべて外す」と同じ位置に出す。押した直後にカーソルの下にあるように
+        const b = put('button', 'cond-clear', '元に戻す');
         b.type = 'button';
         b.onclick = undoClear;
+        put('span', 'note', 'すべて外しました');
       }
+    }
+
+    /* 人名用漢字・縮退ありのスイッチに、入れたら何字に絞られるかを出す（入っているときは今の字数）。
+       いまの一覧の並びから数えるので、検索・区・枠の条件もそのまま効いた数になる。
+       縮退ありは外字を一覧から外す（外字は縮退先を持たない）ので、外字の札は数えない */
+    function countSwitches(total) {
+      const base = it => Array.from(it.char)[0];
+      const jn = el('onlyJinmei').checked ? total : listOrder.filter(it => JINMEI_CHARS.has(base(it))).length;
+      const sh = el('onlyShrink').checked ? total : listOrder.filter(it => !it.mj && shrinkChars.has(base(it))).length;
+      el('jinmeiN').textContent = `${jn.toLocaleString()}字`;
+      el('shrinkN').textContent = mjmap ? `${sh.toLocaleString()}字` : '';
     }
 
     /* 0 件のとき、条件を 1 つ外すと何字になるかを並べる（枠の部品と人名用漢字で数える）。 */
@@ -644,8 +726,7 @@
       box.innerHTML = '';
       if (!ch) { box.hidden = true; return; }
       const base = Array.from(ch)[0];
-      const rad = Object.keys(DICT_RADICALS).find(r => DICT_RADICALS[r].includes(base))
-        || (mjmap && mjmap.dictRadicals ? Object.keys(mjmap.dictRadicals).find(r => mjmap.dictRadicals[r].includes(base)) : null);
+      const rad = dictRadicalOf(base);
       const parts = [...topParts(base, lookupIds), ...(rad ? [['ぶしゅ', rad]] : [])];
       box.hidden = false;
       box.appendChild(document.createTextNode(`「${base}」の構成: `));
@@ -653,11 +734,22 @@
       parts.forEach(([pos, part]) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.textContent = `${SLOT_LABEL[pos]} ${slotGlyph(pos, part)}`;
+        b.textContent = pos === 'ぶしゅ' ? radicalLabel(base, part) : `${SLOT_LABEL[pos]} ${slotGlyph(pos, part)}`;
         b.setAttribute('aria-pressed', slots[pos] === part);
         b.onclick = () => setSlot(pos, slots[pos] === part ? null : part);
         box.appendChild(b);
       });
+    }
+
+    /* 辞書の部首の表示。「火」とだけ出すと火偏と読めてしまうが、火部には 灬（れっか）の字も入る
+       （燕 は火部だが、火は脚の 灬）。部首名に「部」を付け、その字のどの位置にどの字形で入っているかを添える */
+    function radicalLabel(base, rad) {
+      const g = slotGlyph('ぶしゅ', rad);
+      const forms = partForms(g);
+      const r = partsOf(base) || {};
+      const pos = ['へん', 'つくり', 'かんむり', 'あし', 'たれ', 'にょう', 'かまえ', 'なかみ', 'なし'].find(p => r[p] && forms.some(f => r[p].has(f)));
+      const where = pos ? `（${SLOT_LABEL[pos]} ${forms.find(f => r[pos].has(f))}）` : '';
+      return `辞書の部首 ${g}部${where}`;
     }
 
     const hira = s => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
@@ -808,6 +900,7 @@
       rebuildTree();
       drawPbox();
       renderCondBar(total);
+      countSwitches(total);
       fillPalette();
       showCharParts(partsChar);
       commitHash();
@@ -1683,7 +1776,7 @@
     function listScrollTo(y) {
       const v = listView();
       if (treeOn()) { v.pane.scrollTop = y; lastListTop = v.pane.scrollTop; }
-      else window.scrollTo(0, window.scrollY + y - v.top);
+      else window.scrollTo(0, window.scrollY + y - v.top - navH()); // 上端に貼り付いた帯の下に出す
     }
 
     // 見出しとグリッドを1組作って控える。カードの中身は窓に入ったときに make(j) で組む
@@ -1848,12 +1941,90 @@
     });
     el("treePane").addEventListener("mouseleave", () => setHover(null));
 
-    // 右クリックで一覧のその字へ移動する（両ペインとも）
+    // 右クリックでメニューを出す（両ペインとも）
+    /* 右クリックのメニュー。この字へ移動するか、この字を組み立てている部品・辞書の部首・IDS をコピーする。
+       部品は枠に入れるときと同じ「位置 部品」で並べ、コピーするのは部品の字だけ */
     function onContext(e, ch) {
       if (!ch) return;
       e.preventDefault();
-      if (!jumpToChar(ch)) el("mjmapStatus").textContent = `「${ch}」は一覧にありません`;
+      const base = Array.from(ch)[0];
+      const items = [{ label: 'この字へ移動（一覧と縮退ツリー）', run: () => {
+        if (!jumpToChar(ch)) el("mjmapStatus").textContent = `「${ch}」は一覧にありません`;
+      } }, null];
+      // 字そのもの（外字は IVS ごと）、符号位置、MJ 番号
+      const ucs = Array.from(ch).map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')).join(' ');
+      items.push({ label: `<b>${ch}</b> をコピー`, run: () => copyText(ch, `「${ch}」`) });
+      items.push({ label: `${ucs} をコピー`, run: () => copyText(ucs, ucs) });
+      const mj = mjNameOf(ch);
+      if (mj) items.push({ label: `${mj} をコピー`, run: () => copyText(mj, mj) });
+      const parts = topParts(base, lookupIds);
+      const rad = dictRadicalOf(base);
+      if (parts.length || rad) items.push(null);
+      const seen = new Set();
+      parts.forEach(([pos, part]) => {
+        if (seen.has(pos + part)) return;
+        seen.add(pos + part);
+        items.push({ label: `${SLOT_LABEL[pos]} <b>${part}</b> をコピー`, run: () => copyText(part, `「${part}」`) });
+      });
+      if (rad) {
+        const g = slotGlyph('ぶしゅ', rad);
+        items.push({ label: `${radicalLabel(base, rad).replace(g + '部', `<b>${g}</b>部`)} をコピー`, run: () => copyText(g, `「${g}」`) });
+      }
+      openCtxMenu(e.clientX, e.clientY, `「${base}」`, items);
     }
+    /* 字の MJ 番号。外字の札（IVS 付き）はその字形の MJ、水準字はその面区点の例示字形（代表）の MJ。
+       mjmap を読んでいないときは出さない */
+    let mjOfGlyph = null, mjOfGlyphFor = null;   // 字形（IVS 込み）-> MJ index。mjmap を読み直したら組み直す
+    function mjNameOf(ch) {
+      if (!mjmap) return null;
+      if (mjOfGlyphFor !== mjmap) {
+        mjOfGlyph = new Map();
+        mjmap.mj.forEach((m, i) => { if (m[1] && !mjOfGlyph.has(m[1])) mjOfGlyph.set(m[1], i); });
+        mjOfGlyphFor = mjmap;
+      }
+      const base = Array.from(ch)[0];
+      const i = Array.from(ch).length > 1 ? mjOfGlyph.get(ch)
+        : (mjByChar.get(base) || []).find(i => mjBase[i] === base && repOf.has(i)) ?? mjOfGlyph.get(ch);
+      return i == null ? null : mjName(mjmap.mj[i][0]);
+    }
+    const dictRadicalOf = base => Object.keys(DICT_RADICALS).find(r => DICT_RADICALS[r].includes(base))
+      || (mjmap && mjmap.dictRadicals ? Object.keys(mjmap.dictRadicals).find(r => mjmap.dictRadicals[r].includes(base)) : null);
+
+    // メニューはカーソルの位置に出し、画面からはみ出すなら内側へ寄せる。Esc・外側のクリック・スクロールで閉じる
+    function openCtxMenu(x, y, title, items) {
+      closeCtxMenu();
+      const m = document.createElement('div');
+      m.className = 'ctx-menu';
+      m.id = 'ctxMenu';
+      m.setAttribute('role', 'menu');
+      m.innerHTML = `<div class="ctx-title">${title}</div>`;
+      items.forEach(it => {
+        if (!it) { m.appendChild(Object.assign(document.createElement('div'), { className: 'ctx-sep' })); return; }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('role', 'menuitem');
+        b.innerHTML = it.label;
+        b.onclick = () => { closeCtxMenu(); it.run(); };
+        m.appendChild(b);
+      });
+      document.body.appendChild(m);
+      const r = m.getBoundingClientRect(), W = document.documentElement.clientWidth, H = innerHeight;
+      m.style.left = `${Math.max(8, Math.min(x, W - r.width - 8))}px`;
+      m.style.top = `${Math.max(8, Math.min(y, H - r.height - 8))}px`;
+      m.querySelector('button').focus({ preventScroll: true });
+    }
+    function closeCtxMenu() { const m = el('ctxMenu'); if (m) m.remove(); }
+    document.addEventListener('pointerdown', e => { if (!e.target.closest('#ctxMenu')) closeCtxMenu(); });
+    window.addEventListener('scroll', closeCtxMenu, true);
+    document.addEventListener('keydown', e => {
+      const m = el('ctxMenu');
+      if (!m) return;
+      if (e.key === 'Escape') { closeCtxMenu(); return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const bs = [...m.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+      bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
+    });
     el("kanjiContainer").addEventListener("contextmenu", e => {
       const c = e.target.closest(".card");
       onContext(e, c && c.dataset.char);
@@ -1942,7 +2113,7 @@
       // ペインは部首フィルタの下にあるので、画面に入っていなければページごと送る
       const box = el("kanjiPanes").getBoundingClientRect();
       if (box.top > 40 || box.bottom < 120) {
-        window.scrollTo({ top: window.scrollY + box.top - 8, behavior: "smooth" });
+        window.scrollTo({ top: window.scrollY + box.top - navH() - 8, behavior: "smooth" });
       }
 
       clearTimeout(flashTimer);
@@ -2072,6 +2243,34 @@
     el("mjSearch").addEventListener("keydown", e => {
       if (e.key === "Enter") { clearTimeout(searchTimer); runSearch(); }
     });
+
+    /* 画面に貼り付く一覧（縮退ツリーON の一覧とツリー、変体仮名）は内側でスクロールする。
+       ページがまだ上にあるうちにその上でホイールを回すと、ページではなく内側だけが動き、
+       検索の枠を上に残したまま狭い領域が送られる。一覧が上端に貼り付くまではページを送る。
+       上へ回すときは、内側が先頭まで戻ればブラウザが自然にページへ引き継ぐので触らない */
+    /* 上端に貼り付くタブと移動の高さ。貼り付く見出しやペインはこの下に止める。
+       移動の札は件数で折り返して高さが変わるので、変わるたびに CSS の --nav-h へ書き戻す */
+    const activeJump = () => el(el('hentaigana').classList.contains('active') ? 'kanaJumpRow' : 'kanjiJumpRow');
+    const navH = () => el('tabsBar').offsetHeight + activeJump().offsetHeight;
+    const syncNavH = () => {
+      document.documentElement.style.setProperty('--tabs-h', `${el('tabsBar').offsetHeight}px`);
+      document.documentElement.style.setProperty('--nav-h', `${navH()}px`);
+    };
+    syncNavH();
+    if (window.ResizeObserver) { const ro = new ResizeObserver(syncNavH); ['tabsBar', 'kanjiJumpRow', 'kanaJumpRow'].forEach(id => ro.observe(el(id))); }
+
+    function scrollPageFirst(pane, stuckTop, active) {
+      pane.addEventListener('wheel', e => {
+        if (e.deltaY <= 0 || e.ctrlKey || !active()) return;
+        const gap = pane.getBoundingClientRect().top - stuckTop();
+        if (gap <= 1) return;
+        e.preventDefault();
+        const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+        window.scrollBy(0, Math.min(dy, gap));
+      }, { passive: false });
+    }
+    scrollPageFirst(el('kanjiPanes'), () => navH() + 8, () => document.body.classList.contains('tree-on'));
+    scrollPageFirst(el('hentaiganaContainer'), () => navH() + 8, () => true);
 
     // 共通ユーティリティ
     function copyText(text, label) {
