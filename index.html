@@ -11,7 +11,7 @@
 
   <h1>JIS漢字 ＆ 変体仮名 コピーツール</h1>
 
-  <div class="tabs">
+  <div class="tabs" id="tabsBar">
     <button class="tab-btn active" onclick="switchTab('kanji')">漢字モード</button>
     <button class="tab-btn" onclick="switchTab('hentaigana')">変体仮名モード</button>
   </div>
@@ -19,30 +19,36 @@
   <!-- ================= 漢字モード ================= -->
   <div id="kanji" class="tab-content active">
     <div class="tree-bar">
-      <div class="bar-group">
-        <span class="bar-label">設定</span>
-        <label class="file-btn" id="dataBtn" title="縮退データは未読込です"><span class="dot"></span>データ<input type="file" id="mjmapInput" accept=".json" hidden></label>
+      <div class="find-row">
         <span class="bar-label">表示</span>
-        <label class="switch"><input type="checkbox" id="showList" checked> 一覧</label>
-        <label class="switch"><input type="checkbox" id="showTree" disabled> 縮退ツリー</label>
-        <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
-      </div>
-      <div class="bar-group">
-        <span class="bar-label">縮退の根拠</span>
-        <span id="srcSwitches"></span>
-      </div>
-      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)　／　部首は <a href="https://github.com/cjkvi/cjkvi-ids" target="_blank" rel="noopener">CJKVI IDS</a>（CHISE IDS Database）・辞書の部首は <a href="https://www.unicode.org/charts/unihan.html" target="_blank" rel="noopener">Unihan</a></span></div>
-    </div>
-    <div class="search-container" id="radicalListboxes">
-      <div class="find-row jump-row">
-        <span class="bar-label">移動</span>
-        <span class="row-body" id="sectionJump"></span>
+        <div class="row-body">
+          <label class="file-btn" id="dataBtn" title="縮退データは未読込です"><span class="dot"></span>データ<input type="file" id="mjmapInput" accept=".json" hidden></label>
+          <label class="switch"><input type="checkbox" id="showList" checked> 一覧</label>
+          <label class="switch"><input type="checkbox" id="showTree" disabled> 縮退ツリー</label>
+          <button id="fontBadge" class="font-status-btn status-inactive" title="クリックでIPAmj明朝による字形描画をON/OFFできます">IPAmj判定中...</button>
+        </div>
       </div>
       <div class="find-row">
+        <span class="bar-label">縮退の根拠</span>
+        <div class="row-body"><span id="srcSwitches"></span></div>
+      </div>
+      <div class="find-row">
+        <span class="bar-label">凡例</span>
+        <div class="row-body legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示</div>
+      </div>
+    </div>
+    <!-- 移動はパネルの最上段に見せるが、パネルの外（兄弟）に置く。中に入れると、パネルを抜けたところで
+         貼り付きも外れ、一覧のあいだ見えなくなる -->
+    <div class="find-row jump-row jump-bar" id="kanjiJumpRow">
+      <span class="bar-label">移動</span>
+      <span class="row-body" id="sectionJump"></span>
+    </div>
+    <div class="search-container" id="radicalListboxes">
+      <div class="find-row" id="filterRow">
         <span class="bar-label">絞り込み</span>
         <div class="row-body">
-          <label class="switch"><input type="checkbox" id="onlyJinmei"> 人名用漢字だけ (864字)</label>
-          <label class="switch" title="いま選んでいる根拠で縮退が1本でも定義されている字だけを出す。縮退元・縮退先のどちらでも当たる。包摂・統合を外せば、包摂だけで繋がっている字も消える"><input type="checkbox" id="onlyShrink"> 縮退があるものだけ</label>
+          <label class="switch"><input type="checkbox" id="onlyJinmei"> 人名用漢字だけ <span class="n" id="jinmeiN"></span></label>
+          <label class="switch" title="いま選んでいる根拠で縮退が1本でも定義されている字だけを出す。縮退元・縮退先のどちらでも当たる。包摂・統合を外せば、包摂だけで繋がっている字も消える"><input type="checkbox" id="onlyShrink"> 縮退があるものだけ <span class="n" id="shrinkN"></span></label>
           <select id="kuFilter" class="sel"></select>
         </div>
       </div>
@@ -59,14 +65,14 @@
 
   <!-- ================= 変体仮名モード ================= -->
   <div id="hentaigana" class="tab-content">
-    <div class="search-container">
-      <div class="find-row jump-row">
-        <span class="bar-label">移動</span>
-        <span class="row-body" id="kanaJump"></span>
-      </div>
+    <div class="find-row jump-row jump-bar alone" id="kanaJumpRow">
+      <span class="bar-label">移動</span>
+      <span class="row-body" id="kanaJump"></span>
     </div>
     <div id="hentaiganaContainer"></div>
   </div>
+
+  <footer class="credit">文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)　／　部首は <a href="https://github.com/cjkvi/cjkvi-ids" target="_blank" rel="noopener">CJKVI IDS</a>（CHISE IDS Database）・辞書の部首は <a href="https://www.unicode.org/charts/unihan.html" target="_blank" rel="noopener">Unihan</a></footer>
 
   <div id="toast">コピーしました</div>
 

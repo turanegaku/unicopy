@@ -210,6 +210,7 @@
       document.getElementById(tabId).classList.add('active');
       event.target.classList.add('active');
       if (tabId === 'kanji') relayout(); // 隠れているあいだは幅0で測れないので、戻った時に引き直す
+      syncNavH(); // 貼り付く移動の段はモードごとに別なので、高さを取り直す
     }
 
     // --- 漢字モードのUI制御 ---
@@ -232,6 +233,8 @@
     };
     // 入れた部品を描く場所（中心）と大きさ。偏や旁は半分いっぱいに、縁の位置は小さく
     const SIDE_SKIP = ['一', '丨', '丶', '丿', '乙', '亅'];
+    // 入れた部品のチップを置く場所。偏・旁・冠・脚は枠の辺の外、垂・繞・構・中身は角の外
+    const SIDE_SPOT = { 'へん': 'l', 'つくり': 'r', 'かんむり': 't', 'あし': 'b', 'たれ': 'tl', 'にょう': 'bl', 'かまえ': 'tr', 'なかみ': 'br' };
     /* 形が似ていて取り違えやすい部品の組。干 のつもりで 宇（⿱宀于）を探して当たらない、を避ける。
        形の似た部品の公開データは見当たらないので手で持つ。足すときは 1 組 1 文字列 */
     const SIMILAR_PARTS = ['干于千', '土士', '未末', '己已巳', '日曰', '刀力', '人入八', '天夭', '王玉主壬',
@@ -361,10 +364,17 @@
         </div>
         <div class="pbox-info" id="condBar" aria-live="polite"></div>
         <div class="char-parts" id="charParts" hidden></div>`;
-      wrap.appendChild(area);
-      wrap.appendChild(el('searchRow')); // 検索は枠の下に置く。外すのは枠外の条件の帯から
+      // 左に枠、右に検索・絞り込み・条件・件数。探す操作と、その結果の確かめを横に並べる
+      const finder = document.createElement('div');
+      finder.className = 'finder';
+      const side = document.createElement('div');
+      side.className = 'finder-side';
+      side.append(el('searchRow'), el('filterRow'), ...area.querySelectorAll('.pbox-extra, #condBar, #charParts'));
+      finder.append(area, side);
+      wrap.appendChild(finder);
 
-      area.querySelectorAll('.pbox-btn').forEach(b => { b.onclick = () => openPalette(b.dataset.pos); });
+      // 右の列へ移したあとなので、枠の中ではなく文書全体から探す
+      document.querySelectorAll('.pbox-btn').forEach(b => { b.onclick = () => openPalette(b.dataset.pos); });
       wirePbox();
       drawPbox();
     }
@@ -414,12 +424,14 @@
         b.innerHTML = '<span class="g"></span><span class="n"></span>';
         b.querySelector('.g').textContent = part;
         b.querySelector('.n').textContent = n;
-        b.onclick = () => selected ? openPalette(pos, true) : setSlot(pos, part);
+        b.onclick = () => setSlot(pos, selected ? null : part);   // 選択中を押したらそのまま外す
         return b;
       };
-      Object.keys(slots).filter(p => SLOT_GLYPH[p] || p === 'なかみ').forEach(pos => {
-        const side = paletteSide(pos);
-        const list = lists[side] || (lists[side] = Object.assign(document.createElement('div'), { className: `side-list side-${side}` }));
+      Object.keys(slots).filter(p => SIDE_SPOT[p]).forEach(pos => {
+        // 置き場所は位置ごとに固定する。同じ側の位置（偏・垂・繞）を1つの入れ物にまとめると、
+        // どれかを入れ外しするたびに並びが組み直されて揺れる
+        const spot = SIDE_SPOT[pos];
+        const list = lists[spot] = Object.assign(document.createElement('div'), { className: `side-list side-${spot}` });
         const T = conditionChars(pos);
         list.appendChild(chip(pos, slots[pos], countIn(T, slotChars(pos, slots[pos])), true));
         // 先頭に形の似た部品（取り違えの直し先）、続けて呼び名のある部首を先に件数の多い順。
@@ -430,8 +442,10 @@
           .map(c => [c.part, countIn(T, slotChars(pos, c.part)), c.named]).filter(([, n]) => n)
           .sort((a, b) => (b[2] - a[2]) || (b[1] - a[1]));
         [...similar.map(([p, n]) => [p, n, true]), ...others.map(([p, n]) => [p, n, false])]
-          .slice(0, side === 'left' || side === 'right' ? 5 : 3)
+          .slice(0, { l: 10, r: 10, t: 2, b: 2, tl: 3, bl: 3, tr: 3, br: 3 }[spot])
           .forEach(([part, n, sim]) => list.appendChild(chip(pos, part, n, false, sim)));
+        // 角は 1 行しか置けないので「…」は付けない（すべての候補は枠のその区画を押して束で見る）
+        if (spot.length > 1) return;
         const more = Object.assign(document.createElement('button'), { type: 'button', className: 'side-more', textContent: '…' });
         more.title = `${slotTitle(pos)}の候補をすべて見る`;
         more.onclick = () => openPalette(pos, true);
@@ -503,6 +517,16 @@
         <div class="pal-chips" role="listbox" aria-label="${slotTitle(pos)}の部品"></div>
         <button type="button" class="pal-more" hidden></button>`;
       pal.hidden = false;
+      pal.style.marginLeft = pal.style.marginRight = '';
+      // 枠が左端にあると左に開く束（偏・垂・繞）が画面からはみ出す。はみ出すぶんだけ内側へ寄せる。
+      // 左に開く束は右端を基準に置いているので、寄せるのも右側の余白で行う
+      // （狭い画面の束は画面に貼り付くパネルなので寄せない）
+      if (getComputedStyle(pal).position === 'absolute') {
+        const r = pal.getBoundingClientRect(), m = 8;
+        const dx = Math.max(m - r.left, 0) - Math.max(r.right - (document.documentElement.clientWidth - m), 0);
+        if (dx && pal.dataset.side === 'left') pal.style.marginRight = `${-dx}px`;
+        else if (dx) pal.style.marginLeft = `${dx}px`;
+      }
       requestAnimationFrame(() => pal.classList.add('open'));
       pal.querySelector('.pal-close').onclick = closePalette;
       const clr = pal.querySelector('.pal-clear');
@@ -552,7 +576,7 @@
         b.setAttribute('role', 'option');
         b.setAttribute('aria-selected', slots[pos] === c.part);
         b.innerHTML = `<span class="g">${c.glyph}</span><span class="n">${n}</span>`;
-        b.onclick = () => setSlot(pos, c.part);
+        b.onclick = () => setSlot(pos, slots[pos] === c.part ? null : c.part);   // 選択中を押したらそのまま外す
         box.appendChild(b);
       });
       const more = pal.querySelector('.pal-more');
@@ -620,6 +644,17 @@
         b.type = 'button';
         b.onclick = undoClear;
       }
+    }
+
+    /* 人名用漢字・縮退ありのスイッチに、入れたら何字に絞られるかを出す（入っているときは今の字数）。
+       いまの一覧の並びから数えるので、検索・区・枠の条件もそのまま効いた数になる。
+       縮退ありは外字を一覧から外す（外字は縮退先を持たない）ので、外字の札は数えない */
+    function countSwitches(total) {
+      const base = it => Array.from(it.char)[0];
+      const jn = el('onlyJinmei').checked ? total : listOrder.filter(it => JINMEI_CHARS.has(base(it))).length;
+      const sh = el('onlyShrink').checked ? total : listOrder.filter(it => !it.mj && shrinkChars.has(base(it))).length;
+      el('jinmeiN').textContent = `${jn.toLocaleString()}字`;
+      el('shrinkN').textContent = mjmap ? `${sh.toLocaleString()}字` : '';
     }
 
     /* 0 件のとき、条件を 1 つ外すと何字になるかを並べる（枠の部品と人名用漢字で数える）。 */
@@ -808,6 +843,7 @@
       rebuildTree();
       drawPbox();
       renderCondBar(total);
+      countSwitches(total);
       fillPalette();
       showCharParts(partsChar);
       commitHash();
@@ -1683,7 +1719,7 @@
     function listScrollTo(y) {
       const v = listView();
       if (treeOn()) { v.pane.scrollTop = y; lastListTop = v.pane.scrollTop; }
-      else window.scrollTo(0, window.scrollY + y - v.top);
+      else window.scrollTo(0, window.scrollY + y - v.top - navH()); // 上端に貼り付いた帯の下に出す
     }
 
     // 見出しとグリッドを1組作って控える。カードの中身は窓に入ったときに make(j) で組む
@@ -1942,7 +1978,7 @@
       // ペインは部首フィルタの下にあるので、画面に入っていなければページごと送る
       const box = el("kanjiPanes").getBoundingClientRect();
       if (box.top > 40 || box.bottom < 120) {
-        window.scrollTo({ top: window.scrollY + box.top - 8, behavior: "smooth" });
+        window.scrollTo({ top: window.scrollY + box.top - navH() - 8, behavior: "smooth" });
       }
 
       clearTimeout(flashTimer);
@@ -2072,6 +2108,34 @@
     el("mjSearch").addEventListener("keydown", e => {
       if (e.key === "Enter") { clearTimeout(searchTimer); runSearch(); }
     });
+
+    /* 画面に貼り付く一覧（縮退ツリーON の一覧とツリー、変体仮名）は内側でスクロールする。
+       ページがまだ上にあるうちにその上でホイールを回すと、ページではなく内側だけが動き、
+       検索の枠を上に残したまま狭い領域が送られる。一覧が上端に貼り付くまではページを送る。
+       上へ回すときは、内側が先頭まで戻ればブラウザが自然にページへ引き継ぐので触らない */
+    /* 上端に貼り付くタブと移動の高さ。貼り付く見出しやペインはこの下に止める。
+       移動の札は件数で折り返して高さが変わるので、変わるたびに CSS の --nav-h へ書き戻す */
+    const activeJump = () => el(el('hentaigana').classList.contains('active') ? 'kanaJumpRow' : 'kanjiJumpRow');
+    const navH = () => el('tabsBar').offsetHeight + activeJump().offsetHeight;
+    const syncNavH = () => {
+      document.documentElement.style.setProperty('--tabs-h', `${el('tabsBar').offsetHeight}px`);
+      document.documentElement.style.setProperty('--nav-h', `${navH()}px`);
+    };
+    syncNavH();
+    if (window.ResizeObserver) { const ro = new ResizeObserver(syncNavH); ['tabsBar', 'kanjiJumpRow', 'kanaJumpRow'].forEach(id => ro.observe(el(id))); }
+
+    function scrollPageFirst(pane, stuckTop, active) {
+      pane.addEventListener('wheel', e => {
+        if (e.deltaY <= 0 || e.ctrlKey || !active()) return;
+        const gap = pane.getBoundingClientRect().top - stuckTop();
+        if (gap <= 1) return;
+        e.preventDefault();
+        const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+        window.scrollBy(0, Math.min(dy, gap));
+      }, { passive: false });
+    }
+    scrollPageFirst(el('kanjiPanes'), () => navH() + 8, () => document.body.classList.contains('tree-on'));
+    scrollPageFirst(el('hentaiganaContainer'), () => navH() + 8, () => true);
 
     // 共通ユーティリティ
     function copyText(text, label) {
