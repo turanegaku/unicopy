@@ -231,6 +231,13 @@
       'かまえ': 'M3 3H173V173H3Z M41 41V135H135V41Z',
     };
     // 入れた部品を描く場所（中心）と大きさ。偏や旁は半分いっぱいに、縁の位置は小さく
+    const SIDE_SKIP = ['一', '丨', '丶', '丿', '乙', '亅'];
+    /* 形が似ていて取り違えやすい部品の組。干 のつもりで 宇（⿱宀于）を探して当たらない、を避ける。
+       形の似た部品の公開データは見当たらないので手で持つ。足すときは 1 組 1 文字列 */
+    const SIMILAR_PARTS = ['干于千', '土士', '未末', '己已巳', '日曰', '刀力', '人入八', '天夭', '王玉主壬',
+      '冫氵', '礻衤', '采釆', '戊戌戍戎', '母毋', '瓜爪', '鳥烏', '大犬太', '失矢', '牛午', '夂夊',
+      '卯夘', '旦且', '兔免', '貝見', '爿片', '厂广', '冂冖', '亠宀', '朩木', '儿几'];
+    const similarOf = p => { const g = SIMILAR_PARTS.find(g => Array.from(g).includes(p)); return g ? Array.from(g).filter(c => c !== p) : []; };
     const SLOT_GLYPH = {
       'へん': [44, 88, 56], 'つくり': [132, 88, 56], 'かんむり': [88, 26, 32], 'あし': [88, 150, 32],
       'たれ': [22, 22, 22], 'にょう': [22, 154, 22], 'かまえ': [160, 22, 22],
@@ -344,6 +351,7 @@
               <div class="pbox-keys" id="pboxKeys" role="group" aria-label="部品の位置"></div>
             </div>
           </div>
+          <div class="pbox-sides" id="pboxSides"></div>
           <div class="palette" id="partPalette" role="dialog" aria-modal="false" hidden></div>
         </div>
         <div class="pbox-label" id="pboxLabel" aria-live="polite"></div>
@@ -351,6 +359,7 @@
           <button type="button" class="pbox-btn" data-pos="なし"></button>
           <button type="button" class="pbox-btn" data-pos="ぶしゅ"></button>
         </div>
+        <div class="pbox-info" id="condBar" aria-live="polite"></div>
         <div class="char-parts" id="charParts" hidden></div>`;
       wrap.appendChild(area);
       wrap.appendChild(el('searchRow')); // 検索は枠の下に置く。外すのは枠外の条件の帯から
@@ -392,6 +401,43 @@
       const keys = ['かんむり', 'たれ', 'へん', 'つくり', 'にょう', 'あし', 'かまえ', ...(enclosure() ? ['なかみ'] : [])];
       el('pboxKeys').innerHTML = keys.map(p =>
         `<button type="button" data-pos="${p}" aria-label="${slotTitle(p)}${slots[p] ? `：${slots[p]}` : ''}"></button>`).join('');
+      // 入れた部品は、束で選んだときのチップ（字と件数）のまま、枠の外のその側に出しておく。
+      // 隣には同じ位置の他の候補を、いまの条件で残る字数の多い順に並べ、押せばそのまま入れ替わる
+      el('pboxSides').innerHTML = '';
+      const lists = {};
+      const chip = (pos, part, n, selected, similar) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pchip side-chip' + (similar ? ' similar' : '');
+        b.setAttribute('aria-selected', selected);
+        b.title = `${similar ? '似た部品　' : ''}${slotTitle(pos)}：${part}・${n}字`;
+        b.innerHTML = '<span class="g"></span><span class="n"></span>';
+        b.querySelector('.g').textContent = part;
+        b.querySelector('.n').textContent = n;
+        b.onclick = () => selected ? openPalette(pos, true) : setSlot(pos, part);
+        return b;
+      };
+      Object.keys(slots).filter(p => SLOT_GLYPH[p] || p === 'なかみ').forEach(pos => {
+        const side = paletteSide(pos);
+        const list = lists[side] || (lists[side] = Object.assign(document.createElement('div'), { className: `side-list side-${side}` }));
+        const T = conditionChars(pos);
+        list.appendChild(chip(pos, slots[pos], countIn(T, slotChars(pos, slots[pos])), true));
+        // 先頭に形の似た部品（取り違えの直し先）、続けて呼び名のある部首を先に件数の多い順。
+        // 1 画の部首は大抵の字に含まれ候補として役に立たないので出さない。
+        // 左右は枠の高さ（2 列 4 段）、上下は枠の幅に収まる数まで
+        const similar = similarOf(slots[pos]).map(p => [p, countIn(T, slotChars(pos, p))]).filter(([, n]) => n);
+        const others = paletteChips(pos).filter(c => c.part !== slots[pos] && !SIDE_SKIP.includes(c.part) && !similar.some(([p]) => p === c.part))
+          .map(c => [c.part, countIn(T, slotChars(pos, c.part)), c.named]).filter(([, n]) => n)
+          .sort((a, b) => (b[2] - a[2]) || (b[1] - a[1]));
+        [...similar.map(([p, n]) => [p, n, true]), ...others.map(([p, n]) => [p, n, false])]
+          .slice(0, side === 'left' || side === 'right' ? 5 : 3)
+          .forEach(([part, n, sim]) => list.appendChild(chip(pos, part, n, false, sim)));
+        const more = Object.assign(document.createElement('button'), { type: 'button', className: 'side-more', textContent: '…' });
+        more.title = `${slotTitle(pos)}の候補をすべて見る`;
+        more.onclick = () => openPalette(pos, true);
+        list.appendChild(more);
+      });
+      Object.values(lists).forEach(l => el('pboxSides').appendChild(l));
       document.querySelectorAll('.pbox-btn').forEach(b => {
         const p = b.dataset.pos;
         b.textContent = slots[p] ? `${SLOT_LABEL[p]}：${slotGlyph(p, slots[p])}` : SLOT_LABEL[p];
@@ -426,7 +472,7 @@
         if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.dataset.pos) setSlot(e.target.dataset.pos, null);
       });
       document.addEventListener('pointerdown', e => {
-        if (palettePos && !e.target.closest('#partPalette, #pboxHit, .pbox-btn, .cond')) closePalette();
+        if (palettePos && !e.target.closest('#partPalette, #pboxHit, .pbox-btn, .cond, .side-chip')) closePalette();
       });
       document.addEventListener('keydown', e => { if (e.key === 'Escape' && palettePos) { closePalette(); e.preventDefault(); } });
     }
@@ -516,21 +562,25 @@
       const direct = pal.querySelector('.pal-direct');
       direct.innerHTML = '';
       if (pos === 'ぶしゅ') return;
-      const c = Array.from(t).find(ch => !/[぀-ヿ]/.test(ch) && !chips.some(x => x.glyph === ch));
-      if (!c) return;
-      const n = countIn(T, slotChars(pos, c));
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'pal-direct-btn';
-      b.disabled = !n;
-      b.textContent = `「${c}」で探す　${n}字`;
-      b.onclick = () => setSlot(pos, c);
-      direct.appendChild(b);
+      const typed = Array.from(t).filter(ch => !/[぀-ヿ]/.test(ch));
+      const c = typed.find(ch => !chips.some(x => x.glyph === ch));
+      const add = (part, label) => {
+        const n = countIn(T, slotChars(pos, part));
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pal-direct-btn';
+        b.disabled = !n;
+        b.textContent = `${label}　${n}字`;
+        b.onclick = () => setSlot(pos, part);
+        direct.appendChild(b);
+      };
+      if (c) add(c, `「${c}」で探す`);
+      // 打った字と形の似た部品も出す（干 と打てば 于 も）
+      if (typed[0]) similarOf(typed[0]).forEach(p => add(p, `似た部品「${p}」`));
     }
 
-    /* ---- 条件の帯 ----
-       入っている条件をチップで並べ、件数と一緒に一覧の上へ置く。絞り込みの枠の外に出して
-       一覧を送っても見えるようにする（どの条件で何字か、を探しながら確かめられる）。
+    /* ---- 条件の一覧 ----
+       入っている条件をチップで並べ、件数と一緒に枠の下に置く。
        チップの × で 1 つずつ、「すべて外す」で全部を外せる。全部外したあとは少しのあいだ元に戻せる。 */
     let undoState = null, undoTimer = 0;
     function activeConditions() {
@@ -574,9 +624,12 @@
 
     /* 0 件のとき、条件を 1 つ外すと何字になるかを並べる（枠の部品と人名用漢字で数える）。 */
     function zeroHtml() {
-      const tips = Object.keys(slots).map(pos => {
-        const n = conditionChars(pos);
-        return `<button type="button" class="cond" data-off="${pos}">${SLOT_LABEL[pos]} <b>${slotGlyph(pos, slots[pos])}</b> を外すと ${n ? n.size.toLocaleString() : 'すべての'}字</button>`;
+      const tips = Object.keys(slots).flatMap(pos => {
+        const T = conditionChars(pos);
+        // 似た部品に替えると当たるなら、外すより先にそれを出す（干 を 于 にすると 宇 が出る）
+        const sim = similarOf(slots[pos]).map(p => [p, countIn(T, slotChars(pos, p))]).filter(([, n]) => n)
+          .map(([p, n]) => `<button type="button" class="cond" data-pos="${pos}" data-to="${p}">${SLOT_LABEL[pos]} <b>${slots[pos]}</b> を <b>${p}</b> にすると ${n.toLocaleString()}字</button>`);
+        return [...sim, `<button type="button" class="cond" data-off="${pos}">${SLOT_LABEL[pos]} <b>${slotGlyph(pos, slots[pos])}</b> を外すと ${T ? T.size.toLocaleString() : 'すべての'}字</button>`];
       });
       return '<div class="empty-msg">該当する漢字が見つかりませんでした。'
         + (tips.length ? `<div class="zero-tips">${tips.join('')}</div>` : '') + '</div>';
@@ -747,6 +800,7 @@
       if (total === 0) {
         container.innerHTML = zeroHtml();
         container.querySelectorAll('[data-off]').forEach(b => { b.onclick = () => setSlot(b.dataset.off, null); });
+        container.querySelectorAll('[data-to]').forEach(b => { b.onclick = () => setSlot(b.dataset.pos, b.dataset.to); });
         sections = [];
       }
       relayout();        // 高さを入れて位置を測り直し、見えている窓だけ描く

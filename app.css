@@ -38,13 +38,26 @@
     /* 部品の枠。枠のどこを指すかで位置を選び、その側に束（チップの popover）を開く。
        寸法は parts.js の BOX と合わせる（176px 角、構は枠の外 16px まで指せる） */
     .pbox-area { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
-    .pbox { position: relative; }
+    /* 周りの余白は、入れた部品のチップを枠の外の四方に置く場所。部品を入れても枠が動かないよう常に空けておく */
+    .pbox { position: relative; margin: 56px 92px; }
     .pbox-hit { padding: 16px; cursor: crosshair; touch-action: manipulation; }
     .pbox-frame { position: relative; width: 176px; height: 176px; background: var(--surface); border: 1px solid var(--line-strong); }
     .pbox-frame svg { position: absolute; inset: 0; width: 176px; height: 176px; }
     .pbox-guides { stroke: var(--line); stroke-width: 1; fill: none; display: none; }
     .pbox-fills path { fill: rgba(52, 152, 219, 0.10); fill-rule: evenodd; }
     .pbox-shape { fill: rgba(52, 152, 219, 0.12); stroke: var(--main); stroke-width: 2; stroke-dasharray: 5 4; fill-rule: evenodd; }
+    /* 入れた部品と他の候補。左右は枠の高さに収まる 2 列、上下は 1 行で、枠の外のその側に置く */
+    .side-list { position: absolute; display: grid; gap: 4px; }
+    .side-left, .side-right { grid-template-columns: repeat(2, 40px); top: 50%; transform: translateY(-50%); }
+    .side-left  { right: calc(100% + 4px); }
+    .side-right { left: calc(100% + 4px); }
+    .side-top, .side-bottom { grid-auto-flow: column; left: 50%; transform: translateX(-50%); }
+    .side-top    { bottom: calc(100% + 4px); }
+    .side-bottom { top: calc(100% + 4px); }
+    /* 形の似た部品は点線の枠にして、ふつうの候補と見分ける */
+    .side-chip.similar { border-style: dashed; border-color: var(--main); }
+    .side-more { width: 40px; height: 48px; padding: 0; border: 1px dashed var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--muted); cursor: pointer; }
+    .side-more:hover { background: var(--main-soft); }
     /* SVG の要素には HTML の [hidden] の既定が効かない */
     .pbox-shape[hidden] { display: none; }
     .pbox-glyphs span { position: absolute; transform: translate(-50%, -50%); font-family: "Noto Serif JP", serif; line-height: 1; color: var(--heading); pointer-events: none; }
@@ -58,15 +71,9 @@
     .pbox-btn[aria-pressed="true"] { border-color: var(--main); color: var(--main); }
     .cond b { font-family: "Noto Serif JP", serif; font-size: 1rem; }
 
-    /* 条件の帯。絞り込みの枠の外、一覧の上に貼り付け、一覧を送っても条件と件数が見えるようにする。
-       高さを固定し、水準の見出し（同じく sticky）はその下に止める */
-    :root { --cond-bar-h: 48px; }
-    .cond-bar { position: sticky; top: 0; z-index: 8; height: var(--cond-bar-h); box-sizing: border-box; margin-bottom: 8px; padding: 0 8px; display: flex; align-items: center; gap: 8px; overflow-x: auto; white-space: nowrap; background: var(--base); border-bottom: 1px solid var(--line); }
-    .cond-bar .n { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--sub); }
-    .cond-bar .note { font-size: 0.8rem; color: var(--muted); }
-    .cond-clear { margin-left: auto; }
-    /* ツリーONのときはペインが画面いっぱいに貼り付くので、帯は流れの中に置く */
-    body.tree-on .cond-bar { position: static; }
+    .pbox-info { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+    .pbox-info .n { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--sub); }
+    .pbox-info .note { font-size: 0.8rem; color: var(--muted); }
     .zero-tips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; font-size: 0.9rem; }
     /* ホバーの無い端末では、指す前に区画が分からないので境界線を常に出す */
     @media (hover: none) { .pbox-guides { display: inline; } }
@@ -88,6 +95,7 @@
     .pal-find { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 5px; font: inherit; font-size: 0.95rem; }
     .pal-find:focus { outline: none; border-color: var(--main); }
     .pal-direct:empty { display: none; }
+    .pal-direct { display: flex; flex-direction: column; gap: 4px; }
     .pal-direct-btn { width: 100%; padding: 6px 8px; border: 1px dashed var(--main); border-radius: 5px; background: var(--surface); color: var(--main); font: inherit; text-align: left; cursor: pointer; }
     .pal-direct-btn:disabled { opacity: 0.4; cursor: default; }
     .pal-chips { display: grid; grid-template-columns: repeat(auto-fill, 40px); gap: 4px; overflow-y: auto; min-height: 0; }
@@ -120,7 +128,7 @@
 
     /* 漢字グリッド */
     /* 水準の区切り。スクロールしても常に見えるようsticky固定し、下線を水準色に */
-    .level-separator { position: sticky; top: var(--cond-bar-h); z-index: 5; background: var(--base); text-align: center; font-size: 1.4rem; font-weight: bold; padding: 14px 0 10px; margin: 30px 0 16px 0; color: var(--heading); border-bottom: 3px solid #e5e5e5; }
+    .level-separator { position: sticky; top: 0; z-index: 5; background: var(--base); text-align: center; font-size: 1.4rem; font-weight: bold; padding: 14px 0 10px; margin: 30px 0 16px 0; color: var(--heading); border-bottom: 3px solid #e5e5e5; }
     .level-separator span { display: inline-block; position: relative; padding: 0 15px; }
     .level-separator span::before, .level-separator span::after { content: ""; position: absolute; top: 50%; width: 100px; height: 2px; background-color: var(--disabled); }
     .level-separator span::before { right: 100%; margin-right: 15px; }
@@ -304,5 +312,3 @@
     .card.flash { box-shadow: 0 0 0 3px var(--flash); background: var(--flash-bg); }
     .tree-empty { padding: 20px; color: var(--faint); font-size: 0.85rem; text-align: center; }
 
-    /* 条件の帯が無いところ（ツリーONの一覧ペイン、変体仮名）では見出しを上端に止める */
-    body.tree-on .level-separator, #hentaiganaContainer .level-separator { top: 0; }
