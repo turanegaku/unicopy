@@ -532,6 +532,19 @@
       ["〴〵", "U+3034 U+3035", "くの字点（濁点）"],
     ];
 
+    // 合略仮名（2字以上を1字に詰めた字）。Unicode の DIGRAPH 系と、MJ 由来の 𬼀 (CJK拡張F)・𪜈 (拡張B)。
+    const KANA_LIGATURES = [
+      ["ゟ", "U+309F", "より"],
+      ["ヿ", "U+30FF", "コト"],
+      ["𛄣", "U+1B123", "こと"],
+      ["𛄤", "U+1B124", "トキ"],
+      ["𛄥", "U+1B125", "トテ"],
+      ["𛄦", "U+1B126", "ヨリ"],
+      ["𬼀", "U+2CF00", "して"],
+      ["𪜈", "U+2A708", "とも"],
+      ["〼", "U+303C", "ます"],
+    ];
+
     // 五十音の行区分（変体仮名モードのセパレーター用）
     const GOJUON_ROWS = [
       { label: "あ行", bases: ["あ","い","う","え","お"] },
@@ -813,29 +826,31 @@
 
       let total = 0;
       const jumps = []; // 移動チップの元。見出しと、そこにぶら下がる枚数
-      // 繰り返し記号（踊り字）。五十音の行には属さないので先頭に1行だけ置く
-      const repeatSep = document.createElement('div');
-      repeatSep.className = 'level-separator';
-      repeatSep.innerHTML = '<span>繰り返し記号</span>';
-      container.appendChild(repeatSep);
-      const repeatGrid = document.createElement('div');
-      repeatGrid.className = 'hentai-grid';
-      KANA_REPEATS.forEach(([ch, uni, name]) => {
-        const card = document.createElement('div');
-        card.className = ch.length > 1 ? 'card kana-vert' : 'card'; // 2字=くの字点は縦に組む
-        card.innerHTML = `
+      // 繰り返し記号・合略仮名。五十音の行には属さないので先頭に1行ずつ置く
+      [["繰り返し記号", KANA_REPEATS], ["合略仮名", KANA_LIGATURES]].forEach(([label, list]) => {
+        const sep = document.createElement('div');
+        sep.className = 'level-separator';
+        sep.innerHTML = `<span>${label}</span>`;
+        container.appendChild(sep);
+        const grid = document.createElement('div');
+        grid.className = 'hentai-grid';
+        list.forEach(([ch, uni, name]) => {
+          const card = document.createElement('div');
+          card.className = ch.length > 1 ? 'card kana-vert' : 'card'; // 2字=くの字点は縦に組む
+          card.innerHTML = `
               <span class="char-main">${ch}</span>
               <div class="hentai-meta">
                 <span>${uni}</span>
                 <span>${name}</span>
               </div>
             `;
-        card.onclick = () => copyText(ch, `「${ch}」`);
-        repeatGrid.appendChild(card);
+          card.onclick = () => copyText(ch, `「${ch}」`);
+          grid.appendChild(card);
+        });
+        container.appendChild(grid);
+        total += list.length;
+        jumps.push({ sep, label, n: list.length });
       });
-      container.appendChild(repeatGrid);
-      total += KANA_REPEATS.length;
-      jumps.push({ sep: repeatSep, label: '繰り返し記号', n: KANA_REPEATS.length });
 
       GOJUON_ROWS.forEach(row => {
         const baseItems = row.bases.map(base => HENTAIGANA_DATA.filter(d => d.base === base));
