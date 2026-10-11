@@ -421,6 +421,19 @@
     };
     // 位置ごとの、先頭から何個が伝統的な呼び名を持つ部首か。残りはIDSの構成部品
     const RADICAL_REAL = {"へん": 62, "つくり": 13, "かんむり": 19, "あし": 9, "かまえ": 11, "たれ": 5, "にょう": 8};
+    // その位置にその部品があるとIDSからは言えない字（字書の部から足した 今 会、部品そのものの 木）。
+    // 絞り込みには入れるが、一覧で部品の位置を塗るときは外す
+    const RADICAL_UNPLACED = {
+      "へん": {"木": "㮍㮤䯂木未末本朮朱朶朿束来杰東果枩架某柒染柔柬柰柴査栗栞栽栾桀桌桑桒桼梁條梟梦梨梵梺棃棄棊棐棗棘棠棨森棻棼楚業楽榘榦榮槀槃槊槧槩槳樂橆橐橤檃檗檠櫐櫜櫱櫽欒欝沐渠牀琹臬采閑集𣏟𣙇𣝣𥄢𥱋", "氵": "㽷水氵氶氷永氺求沗泉泰洯淼滎漐漿潁灥砅衍閖𣳾𣴎", "亻": "㽗人亻仄今介从仐仚令以企会佘余來侖俎倉傘僉全内命囚坐尒巫珡畒秂臥臾舍舎閃𠆢𧪄", "口": "口可史右叴号司各合吉吊名后吏向君吝吞否含吾呂呆呈呉告呑周呰和咎咠咢咨咫咸咼哀品哉員哥哭哲哿唇唐售問啓啠啻善喆喜喪喬單営喿嗇嘉嘗噐器嚚嚞嚢嚭嚮嚲嚳嚴囂囅囊囍回如扣杏槑知肙舗轡釦器𠷡", "扌": "手扌才承拏拜拳拿挈挐挲掌掔掣揫摩摯摹撃擊擎擘擥擧攀攣𢪸", "金": "金釡鋆鋻鍪鍫鍳鎏鎣鏖鏧鏨鑒鑫鑾鑿𨥫", "忄": "㣺㤗㥯心忄必忍忘忝忞忠忢忩念忽忿怎怒怘思怠怤急怨怱恁恋恐恕恙恚恣恥恩恭息恵恷恿悉悊悠患您悪悲悳悶惑惠惡惣想惷惹愁愆愈愍意愙愚感愨愬愿慁慂慇慈態慕慙慝慧慫慮慰慼慾憇憊憑憖憗憙憥憨憩憼懃懇懋懕懟懣懲懸戀沁芯鈊隳懲𢛳𢡛𢢫", "糸": "糸系素索紫紮絛絜絮綦綮緊緜縈縣縻繁繇繋繫繭纍纛辮繁𥿻𦀌", "土": "㽵土圡在圭坌坴垈型垚埜埶執基埿堂堅堊堕堡堯報堲塁塋塑塗塞塰塵塹塾墅墊墍墏墓墜墨墪墮墾壁壅壍壑壓壘壟寺庄杜汢灶牡社肚墨社𡈽𡌛𡏄𥸮", "言": "言訾詹誓誾諐謍謦警譬譶譽讋讎讐辯這", "虫": "䖸虫虱蚕蚤蚩蛗蛩蛬蛮蜀蜃蜇蜑蜚蝕蝥蝨蝱融螢螫螯螽蟁蟄蟲蟹蠁蠃蠡蠢蠶蠹蠻触閩𧏛𧏾", "女": "女妄妛妝妟妥妻妾委姜姦姧姿威娑娶婁婆婪婺媵嫠嬖嬰嬲嬴孁孌安汝籹要𡚴", "山": "㟢㠀山岊岌岑岔岢岦岧岩岪岱岳岸岺峇峉峩峯島崇崋崑崔崖崗崙崟崧崩崫崱嵂嵆嵇嵌嵐嵒嵓嵜嵡嵩嵬嵳嶄嶈嶌嶐嶔嶤嶲嶴嶷嶺嶽巋巌巍巒巓巖幽杣汕炭疝秈耑舢訔訕豈辿閊𡵅𡵢𡶷𡷠𡼞𨥉", "月": "月有朔朗朙望朝朞期玥阴朗", "日": "㫖㫪㬎㬜冒日旭旹昂昃昆昇昊昌昏易昔昜星春昪是昰昱昴昶昺晁晃晉晋晏晑晟晢晨普景晳晶晷晸智暃暈暑暠暢暫暮暴暹暼曁曇曩曳曷書曹曺曻曼曽曾替朁會朅杲杳汨沓炅者耆衵量間阳馹魯暑𣆶𣇃𣇄𣇵", "火": "火灬灸炎炗炙炱点為烈烋烏烝烹焄焈焉焏焚無焦焱然煎煑煕煞煦照煮熈熊熏熒熙熟熨熬熱熹燄燓燕燙營燹燾爇爕爨狄疢秋羔耿黙煮𤎼", "王": "玉玊王琴琶瑟瑩璗璧璺璽皇砡聖鈺閏閠𤩍", "魚": "魚鯊鰲鱉鱟", "石": "石砉砦碁碆碞碧磊磐磨磬礐礜礬礱跖鉐鮖𥓙", "衤": "衣衤表衰衷衾袁袈袋袞袠裂装裊裏裔裘裛裝裟裳裴裵裹製褁褒褜褧褻襃襄襞襲", "犭": "犬犭犮猒献猷獎獒獣獸獻畎默突臭", "𧾷": "足跫蹔蹙躄齪𧾷", "禾": "䅈禾秀秊秦稟稾穌酥龢", "目": "目盲直盾省眉看県眞眥眷着睘督睪睾睿瞀瞢瞥瞽瞿矗窅罒苜", "阝": "阜阝", "馬": "馬馽駑駕騖騭驘驚驫鰢", "米": "米粂粛粟粢粤粦粱粲粼糜糞糵糶迷麋𥹢", "車": "車軣輝輦輩輿轟連陣", "貝": "貝負貧貨貪責貭貰貲貴貸費貿賀賁賃資賚賛賞賢質賴贄贅贇贊贏贒贔贛閴齎", "示": "䄅示礻祁祐祖祝神祟祢祥票祭祷禀禁禄禅禍禎福禦禰視", "𩙿": "食飠飯飴飼飽飾餅餈餐餓館餮饕饗饜𩙿𩛰𩜙𩝐", "彳": "彳", "田": "田由甲申甼畀界畏畐留畚畝畠畢畧番畫畬異畱畲畳當畾畿疂疉疊累細胃苗鈿雷", "酉": "酉酋醤醫醬", "巾": "巾布帋希帑帒帘帚帛帝帟帥師席帮帯帰帶常幇幕幣幤幫歸𢎭", "舟": "舟輈", "革": "革鞏", "弓": "弓弔弗弟弩弯彎穹芎躬𥫤", "方": "方旁旉昉枋祊紡肪舫芳訪鈁閍防髣魴", "耳": "耳聚聞聟聱聲聳聶聻聾茸餌", "立": "立竒竜竟章童竪競竸笠粒翌苙", "子": "㫗子孑孒孕字存孚孝孟季孥学孨孯孰孱孳孵學孼孽孿斈杍李耔芓", "牛": "牛牮牽犁犂犇犎犖犛窂𤘩𤚥", "工": "工左巨差式扛杠杢毉汞江矼空紅缸肛舡虹訌豇貢釭", "歹": "歹", "羊": "羊羐羑羗羞羣群羨義羮羲羸羹觧詳譱養鮮𦍌𩣆", "骨": "骨", "齒": "齒齢齧𪗱𪘂𪘚", "角": "角觜觱𩷛", "止": "止正步歩歪歬歯歳沚祉耻肯芷趾阯祉", "豸": "豸", "矢": "矢矦笶鉃", "耒": "耒", "豆": "豆豊豎豐逗鋀餖", "爿": "爿状", "片": "片", "疋": "疋疌疎疏胥蛋𤴔", "黽": "䵷黽黿鼂鼃鼇鼈", "鼠": "鼠鼬鼯鼷鼹", "里": "里重釐鯉", "釆": "釆", "黹": "黹", "冫": "冫", "身": "身", "白": "白", "丨": "丨", "缶": "缶", "谷": "谷", "一": "一", "冖": "冖", "丿": "丿", "臣": "臣", "干": "干"},
+      "つくり": {"刂": "㓛刀刁刂刃刄切刕初刧券剋前剏剪剱劈劒劔叨召屶忉朷辧辺釖𠝏", "攵": "攴攵敍敧敲整敺斃斄斅變", "邑": "䢵邑邙邢那邦邨邰邱邳邵邶邸邾郁郃郄郇郈郊郎郗郛郜郞郟郡郢部郫郭郯郲郴郵郷都郾郿鄀鄂鄄鄆鄒鄔鄕鄖鄘鄙鄜鄞鄢鄣鄧鄭鄯鄰鄱鄲鄴鄷鄹鄺鄽酆酇酈都𨛗𨛺", "欠": "欠芡", "斤": "斤斥斧欣芹近頎", "殳": "殳疫芟", "戈": "戈戉戊戌戍戎成我戒戔或戚戛戞截戴裁載", "卩": "卩卮危卵卷卺厄氾犯", "彡": "彡彣彦彧彪須鬽", "艮": "艮良茛退", "聿": "聿肅肇", "无": "无旡既炁既", "隶": "隶", "阝": "阝", "頁": "頁", "隹": "隹", "寸": "寸", "月": "月", "又": "又", "口": "口", "且": "且", "干": "干", "皮": "皮", "𠂉": "𠂉", "犬": "犬", "日": "日", "木": "木", "白": "白", "十": "十", "瓦": "瓦", "工": "工", "斗": "斗", "比": "比", "生": "生", "非": "非", "人": "人", "山": "山", "弓": "弓", "甘": "甘", "谷": "谷", "冫": "冫", "八": "八", "卜": "卜", "女": "女", "止": "止", "子": "子", "己": "己", "瓜": "瓜", "丶": "丶", "丿": "丿", "牙": "牙", "入": "入", "几": "几", "厶": "厶", "氏": "氏", "疋": "疋", "耳": "耳", "夂": "夂", "心": "心", "田": "田", "車": "車"},
+      "かんむり": {"艹": "䒑艸艹蒁薨雚艹艹", "竹": "竹", "宀": "㝬宀", "亠": "亠卞", "雨": "雨靆靉", "穴": "穴穵鴪", "罒": "网罒罔𦉰", "冖": "冖冘隺𤇾", "髟": "髟", "小": "㡀小尓尚尞尠巣当挙栄畄肖蛍覚誉釥鴬鼡", "戸": "䋆䡎戸戾房所扁扃扆扇扈扉昈枦沪炉粐肩舮芦鈩雇馿魲", "爫": "爪爫爬爲爴笊爫", "虍": "虍虐虓處虖虗虚虛虜虞號虢虧鬳虜", "襾": "襾西覀覆覇賈迺𩗏", "夂": "夂変愛憂虁", "彐": "彑彔彖彗彘彙灵秉雪", "老": "老耂考耊蛯鮱者", "幺": "幺幻幾麼", "癶": "癶", "一": "一", "山": "山", "丿": "丿", "丨": "丨", "日": "日", "十": "十", "八": "八", "人": "人", "口": "口", "田": "田", "白": "白", "厶": "厶", "木": "木", "臣": "臣", "非": "非", "止": "止", "自": "自", "隹": "隹", "臼": "臼", "目": "目", "米": "米"},
+      "あし": {"心": "㣺㤗㤚心忄必忔忙忝忡忤快忮忯忰忱忳忸忻忼怍怏怐怔怕怖怗怙怛怜怡怢怦性怩怪怫怯怳怵怺恂恃恆恇恊恌恍恒恟恠恢恤恥恨恪恫恬恭恰悁悃悄悋悌悍悒悔悕悖悗悚悛悝悞悟悦悧悩悰悱悴悵悶悸悼悽悾情惆惇惈惋惓惔惕惘惙惚惛惜惝惟惧惨惮惰惱惲惴惵惶惸惺惻愀愃愉愎愐愒愓愕愜愞愡愧愫愰愴愷愺愼愽愾慄慆慊慌慍慎慓慕慘慚慟慠慢慣慥慨慮慯慱慳慴慵慷憍憎憐憒憓憔憘憚憤憧憫憬憭憮憶憹憺憾懆懈懊懌懍懐懝懦懴懵懶懷懺懼懽懾沁鈊隳悔慨憎", "灬": "㷔㸅火灬灯灸灼炎炒炕炗炙炟炤炫炬炮炯炱炳炷炸為炻烊烏烑烓烔烘烙烜烟烤烬烱烽焃焆焇焈焌焔焙焚焜焞焠焫焮焯焰焱焼煆煇煉煊煌煐煑煒煓煖煙煜煠煤煥煨煩煬煽熀熄熅熇熏熒熔熕熖熛熠熢熨熮熯熳熺熾燁燃燄燈燉燋燎燐燒燓燔燗燙燜營燠燥燦燧燬燭燵燹燻燼燿爀爆爍爐爕爛爨狄畑疢秋秌耿𤇆𤎼", "足": "䟽䠖足趺跆跈跋跌跎跏跑跗跙跚距跡跣跨跪跬路跳践跼跽踆踈踉踊踌踏踐踔踖踝踞踟踠踡踢踣踧踪踰踴踵踶踹踽蹂蹄蹈蹉蹊蹋蹌蹐蹕蹟蹠蹢蹣蹤蹬蹭蹯蹰蹲蹴蹶蹻蹼躁躅躇躊躋躍躑躓躔躘躙躞躡躪齪𧾷𨂊𨂻", "儿": "儿兆兎兔兢匹四虎免", "廾": "廾", "尢": "尢尣尤尨尩尫尰就屼扤杌虺豗", "黽": "䵷黽", "舛": "舛", "禸": "禸禹禺", "一": "一", "木": "木", "口": "口", "八": "八", "日": "日", "皿": "皿", "女": "女", "十": "十", "月": "月", "虫": "虫", "丿": "丿", "小": "小", "巾": "巾", "丨": "丨", "人": "人", "田": "田", "手": "手", "又": "又", "子": "子", "目": "目", "寸": "寸", "厶": "厶", "示": "示", "夂": "夂", "亅": "亅", "言": "言", "丶": "丶", "山": "山", "隹": "隹", "米": "米", "耳": "耳", "几": "几", "牛": "牛", "豆": "豆", "止": "止", "比": "比", "瓦": "瓦", "冂": "冂", "凵": "凵", "弓": "弓", "彡": "彡", "缶": "缶", "艮": "艮", "車": "車", "勹": "勹", "卜": "卜", "工": "工", "干": "干", "犬": "犬", "酉": "酉", "非": "非"},
+      "かまえ": {"門": "門", "囗": "囗", "勹": "勹匁匆匏芻", "冂": "冂円冉再冐冑冓冕最", "匚": "匚", "行": "䯒行術街衘衙衛衝衞衟衡衢裄銜鵆", "弋": "弋弐弑杙鳶", "凵": "凵凸凹出画豳𦱳", "鬥": "鬥", "气": "气汽", "匸": "匸匾", "几": "几", "一": "一"},
+      "たれ": {"疒": "疒", "广": "广", "尸": "尸尺尽昼鳲", "厂": "厂厳", "戸": "䋆䡎戸戾所扃扆昈枦沪炉粐舮芦鈩馿魲", "丨": "丨", "耂": "耂"},
+      "にょう": {"辶": "辵辶辶", "儿": "㓁儿允兄充兆兇先光兊克兌免兎児兒兔兕党兜兠兢匹四尭灮皃禿羌虎免", "走": "走赱跿陡", "鬼": "鬼魂魏魔魘", "麥": "麥麦麸麹𪎌", "廴": "廴", "支": "支攲枝歧肢蚑豉跂頍", "夊": "夊夋夌复夏夐夔", "瓦": "瓦"},
+    };
+    // 位置別の字体 -> 親の康熙部首。部首の入力欄で 人 と打っても 亻 に当てるのに使う
+    const RADICAL_FAMILY = {"亻": "人", "⺅": "人", "冫": "冰", "刂": "刀", "⺌": "小", "忄": "心", "⺗": "心", "扌": "手", "氵": "水", "氺": "水", "灬": "火", "爫": "爪", "犭": "犬", "王": "玉", "罒": "网", "耂": "老", "⺮": "竹", "糹": "糸", "艹": "艸", "衤": "衣", "訁": "言", "釒": "金", "阝": "阜", "飠": "食", "𩙿": "食", "辶": "辵", "⻌": "辵", "攵": "攴", "月": "肉", "𧾷": "足", "戸": "戶", "歯": "齒", "竜": "龍", "亀": "龜", "麦": "麥", "黄": "黃", "斉": "齊", "青": "靑", "黒": "黑"};
     /* radicals:end */
 
 
@@ -618,6 +631,14 @@
         legend.innerText = `${PART_LABELS[part]} (${part})`;
         group.appendChild(legend);
 
+        // 113個から目で探すのは無理なので、字（人でも亻に当てる）か読み（にんべん）で絞れるようにする
+        const find = document.createElement('input');
+        find.type = 'text';
+        find.className = 'chip-find';
+        find.placeholder = '字・読み';
+        find.setAttribute('aria-label', `${PART_LABELS[part]}の部品を字か読みで絞る`);
+        group.appendChild(find);
+
         const row = document.createElement('div');
         row.className = 'chip-row';
         Object.keys(KANJI_RADICALS[part]).forEach((rad, i) => {
@@ -629,6 +650,7 @@
           const chip = document.createElement('label');
           chip.className = i < RADICAL_REAL[part] ? 'radical-chip' : 'radical-chip sub';
           chip.title = `${yomi || rad}（${part}）`;
+          Object.assign(chip.dataset, { part, rad, yomi: yomi || rad, title: chip.title });
           const box = document.createElement('input');
           box.type = 'checkbox';
           box.name = 'radical';
@@ -636,12 +658,15 @@
           box.onchange = renderKanji;   // 入り切りはチェックボックスそのものに任せる
           chip.appendChild(box);
           chip.appendChild(document.createTextNode(rad));
+          chip.appendChild(Object.assign(document.createElement('span'), { className: 'n' }));
           row.appendChild(chip);
         });
         group.appendChild(row);
+        wireChipFind(find, row);
         grid.appendChild(group);
       });
       wrap.appendChild(grid);
+      wrap.appendChild(Object.assign(document.createElement('div'), { id: 'charParts', className: 'char-parts', hidden: true }));
       wrap.appendChild(el('searchRow')); // 検索は部首の下＝CLEARの真上に置く
 
       const clearBtn = document.createElement('button');
@@ -651,6 +676,124 @@
       wrap.appendChild(clearBtn);
     }
 
+    /* 位置×部品 -> その部品を持つ字の集合。第1〜4水準は app.js に、MJ外字は mjmap.json にある。
+       一覧の絞り込み・件数の先読み・字から部品を引く、の3か所が同じ集合を見る。
+       mjmap を読み込み直したら外字ぶんが変わるので捨てる（loadMjmap）。 */
+    const radSetCache = new Map();
+    function radSet(part, rad) {
+      const key = `${part}::${rad}`;
+      let set = radSetCache.get(key);
+      if (!set) {
+        set = new Set(KANJI_RADICALS[part][rad]);
+        const gai = mjmap && mjmap.radicals && (mjmap.radicals[part] || {})[rad];
+        if (gai) for (const c of gai) set.add(c);
+        radSetCache.set(key, set);
+      }
+      return set;
+    }
+
+    /* クエリプレビュー: いまの条件にこのチップを足すと何字残るかを、チップの角に出す。
+       0字になる組はグリフを薄くする（数字の「0」も出るので色だけの表示にはならない）。
+       数えるのは部首と「人名用漢字だけ」まで。検索欄・区・縮退の絞り込みは数えない。
+       何も絞っていないときは全チップが静的な字数になるだけなので出さない。 */
+    function updateChipPreview() {
+      let T = null;
+      document.querySelectorAll('input[name="radical"]:checked').forEach(box => {
+        const [part, rad] = box.value.split('::');
+        const set = radSet(part, rad);
+        T = T ? new Set([...T].filter(c => set.has(c))) : set;
+      });
+      if (el('onlyJinmei').checked) T = new Set([...(T || JINMEI_CHARS)].filter(c => JINMEI_CHARS.has(c)));
+      document.querySelectorAll('.radical-chip').forEach(chip => {
+        const d = chip.dataset;
+        if (!T) {
+          chip.querySelector('.n').textContent = '';
+          chip.classList.remove('zero');
+          chip.title = d.title;
+          return;
+        }
+        const set = radSet(d.part, d.rad);
+        let n = 0;
+        for (const c of T) if (set.has(c)) n++;
+        chip.querySelector('.n').textContent = n;
+        chip.classList.toggle('zero', n === 0 && !chip.querySelector('input').checked);
+        chip.title = `${d.title}・${n}字`;
+      });
+    }
+
+    /* 一覧の字に、いま選んでいる部品がどこにあるかを重ねる。
+       位置は IDS の演算子から決めた へん/つくり… なので、へん＝左半分、つくり＝右半分のように
+       カードの半分を薄く塗る（囲い・垂れ・繞は L字や枠）。縮退先として引き込んだだけの字と、
+       字書の部から足しただけの字（へん/亻 の 今 会）は、そこに部品があるとは言えないので塗らない。 */
+    let activeRads = [];
+    const HL_CLASS = { 'へん': 'l', 'つくり': 'r', 'かんむり': 't', 'あし': 'b', 'かまえ': 'o', 'たれ': 'tl', 'にょう': 'bl' };
+    function hlHtml(char) {
+      if (!activeRads.length) return '';
+      const base = Array.from(char)[0];
+      const pos = new Set();
+      activeRads.forEach(r => { if (r.set.has(base) && !r.off.has(base)) pos.add(r.part); });
+      return [...pos].map(p => `<span class="hl hl-${HL_CLASS[p]}"></span>`).join('');
+    }
+
+    /* 字から条件へ（query by example）: カードをクリックした字が、どの位置にどの部品を持つかを
+       ボタンで並べる。押すとそのチップの入り切りになる。部品を目で探さずに、
+       見つけた字を足がかりに条件を作れる。 */
+    let partsChar = null;
+    function charParts(ch) {
+      const base = Array.from(ch)[0];
+      const out = [];
+      Object.keys(KANJI_RADICALS).forEach(part => Object.keys(KANJI_RADICALS[part])
+        .forEach(rad => { if (radSet(part, rad).has(base)) out.push([part, rad]); }));
+      return out;
+    }
+    function showCharParts(ch) {
+      const box = el('charParts');
+      if (!box) return;
+      partsChar = ch;
+      box.innerHTML = '';
+      if (!ch) { box.hidden = true; return; }
+      const parts = charParts(ch);
+      box.hidden = false;
+      box.appendChild(document.createTextNode(`「${Array.from(ch)[0]}」の構成: `));
+      if (!parts.length) { box.appendChild(document.createTextNode('部品なし')); return; }
+      parts.forEach(([part, rad]) => {
+        const chip = [...document.querySelectorAll('.radical-chip')].find(c => c.dataset.part === part && c.dataset.rad === rad);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = `${PART_LABELS[part]} ${rad}`;
+        b.title = chip ? chip.dataset.title : '';
+        b.setAttribute('aria-pressed', chip ? chip.querySelector('input').checked : false);
+        b.onclick = () => chip && chip.querySelector('input').click();
+        box.appendChild(b);
+      });
+    }
+
+    // 入力欄でチップを絞る。IME変換中も読みで絞れるよう composing は待たない。
+    // Enter は先頭の1つを選ぶ（変換確定の Enter は除く）。Esc で入力を消す。
+    const hira = s => s.replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    const radFamily = c => { c = c.normalize('NFKC'); return RADICAL_FAMILY[c] || c; };
+    function wireChipFind(find, row) {
+      const chips = [...row.children];
+      const apply = () => {
+        const t = hira(find.value.trim().normalize('NFKC'));
+        const fam = new Set(Array.from(t).map(radFamily));
+        chips.forEach(chip => {
+          chip.hidden = !!t && !(fam.has(radFamily(chip.dataset.rad)) || chip.dataset.yomi.includes(t));
+        });
+      };
+      find.addEventListener('input', apply);
+      find.addEventListener('keydown', e => {
+        if (e.isComposing) return;
+        if (e.key === 'Escape') { find.value = ''; apply(); }
+        if (e.key !== 'Enter') return;
+        const hit = chips.find(c => !c.hidden);
+        if (!hit || !find.value.trim()) return;
+        hit.querySelector('input').click();
+        find.value = '';
+        apply();
+      });
+    }
+
     function clearKanjiSearch() {
       document.querySelectorAll('input[name="radical"]:checked').forEach(b => { b.checked = false; });
       el('onlyJinmei').checked = false;
@@ -658,6 +801,7 @@
       el('kuFilter').value = '';
       el('mjSearch').value = '';
       el('mjmapStatus').textContent = '';
+      partsChar = null;
       renderKanji();
     }
 
@@ -670,12 +814,11 @@
       let targetChars = null; // null = すべて
       // 部首は複数選べる。選んだぶんはANDで重ねる（人名用漢字や検索と同じ畳み方）
       const radicals = document.querySelectorAll('input[name="radical"]:checked');
+      activeRads = [];
       radicals.forEach(box => {
         const [part, rad] = box.value.split('::');
-        const set = new Set(KANJI_RADICALS[part][rad]);
-        // 外字は数が多いので一覧には埋め込まず mjmap.json に置いてある。読めていれば足す
-        const gai = mjmap && mjmap.radicals && (mjmap.radicals[part] || {})[rad];
-        if (gai) for (const c of gai) set.add(c);
+        const set = radSet(part, rad);
+        activeRads.push({ part, set, off: new Set((RADICAL_UNPLACED[part] || {})[rad] || '') });
         targetChars = targetChars ? new Set([...targetChars].filter(c => set.has(c))) : set;
       });
       // 当たった字の縮退先も一覧に入れる。あめかんむりで引くと 霸 は出るが 覇 は出ないので、
@@ -736,6 +879,8 @@
       relayout();        // 高さを入れて位置を測り直し、見えている窓だけ描く
       buildSectionJump();
       rebuildTree();
+      updateChipPreview();
+      showCharParts(partsChar);
     }
 
     /* ---- 検索で当たった字の縮退先も一覧に入れる ----
@@ -815,7 +960,7 @@
       // 光らせる1枚はDOMではなく添字で持っているので（flashI）、ここで着せ直す
       const hot = i === flashI;
       return cardHtml(`lvl${it.level}${hot ? " flash" : ""}`, it.char, title,
-        it.tag ? `<span class="ku-tag">${it.tag}</span>` : "",
+        (it.tag ? `<span class="ku-tag">${it.tag}</span>` : "") + hlHtml(it.char),
         cardPos(j) + (hot ? `;--flash:${LEVEL_COLOR[it.level] || LEVEL_COLOR[5]}` : ""));
     }
 
@@ -1046,6 +1191,7 @@
     };
     function loadMjmap(text, source) {
       mjmap = JSON.parse(text);
+      radSetCache.clear();
       mjByChar.clear(); candByMj.clear(); mjIndex.clear(); jisChar.clear();
 
       repOf.clear();
@@ -1754,7 +1900,9 @@
     // カードのクリックは委譲で受ける（5万枚ぶんのハンドラを張らないため）
     el("kanjiContainer").addEventListener("click", e => {
       const c = e.target.closest(".card");
-      if (c) copyText(c.dataset.char, `「${c.dataset.char}」`);
+      if (!c) return;
+      copyText(c.dataset.char, `「${c.dataset.char}」`);
+      showCharParts(c.dataset.char);
     });
     el("kanjiContainer").addEventListener("mouseover", e => {
       const c = e.target.closest(".card");

@@ -218,6 +218,9 @@ def build(ids, jis_chars, gaiji_chars):
 
     # 位置の並びは POS のまま（一覧の見出しの並びになる）。部品は多い順
     # 字書の部の立て方を重ねる。位置はIDSのままなので、岩は かんむり/山 と へん/山 の両方に出る
+    # IDSの演算子で位置が決まった字を控えておく。ここから後で足す字（字書の部と、原子字の自己登録）は
+    # その位置にその部品があるとは限らないので、一覧で部品の位置を塗るときに外す
+    placed = {pos: {c: set(v) for c, v in d.items()} for pos, d in idx.items()}
     real = load_bushu(BUSHU_JSON, idx)
     for (pos, c), (_, chars) in real.items():
         idx[pos][c] |= chars & set(jis_chars)
@@ -245,6 +248,9 @@ def build(ids, jis_chars, gaiji_chars):
 
     table = {pos: {c: ''.join(sorted(idx[pos][c])) for c in cs if idx[pos][c]}
              for pos, cs in chips.items() if cs}
+    unplaced = {pos: {c: ''.join(sorted(idx[pos][c] - placed.get(pos, {}).get(c, set())))
+                      for c in d if idx[pos][c] - placed.get(pos, {}).get(c, set())}
+                for pos, d in table.items()}
 
     # 外字は mjmap.json 側に置く。inline に足すと app.js が155KB膨らむ
     gai = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -261,10 +267,10 @@ def build(ids, jis_chars, gaiji_chars):
                           else by_pos.get((pos, c)) or reading_of[c])
                       for c in cs if (pos, c) in real or by_pos.get((pos, c)) or c in reading_of}
                 for pos, cs in table.items()}
-    return table, gaiji, readings, n_real, compound, selfref
+    return table, gaiji, readings, n_real, unplaced, compound, selfref
 
 
-def js_block(table, readings, n_real):
+def js_block(table, readings, n_real, unplaced):
     def obj(d, indent):
         pad = ' ' * indent
         rows = [f'{pad}  {json.dumps(k, ensure_ascii=False)}: {json.dumps(v, ensure_ascii=False)},'
@@ -286,6 +292,14 @@ def js_block(table, readings, n_real):
     out.append('    };')
     out.append('    // 位置ごとの、先頭から何個が伝統的な呼び名を持つ部首か。残りはIDSの構成部品')
     out.append('    const RADICAL_REAL = ' + json.dumps(n_real, ensure_ascii=False) + ';')
+    out.append('    // その位置にその部品があるとIDSからは言えない字（字書の部から足した 今 会、部品そのものの 木）。')
+    out.append('    // 絞り込みには入れるが、一覧で部品の位置を塗るときは外す')
+    out.append('    const RADICAL_UNPLACED = {')
+    for pos, d in unplaced.items():
+        out.append(f'      {json.dumps(pos, ensure_ascii=False)}: {json.dumps(d, ensure_ascii=False)},')
+    out.append('    };')
+    out.append('    // 位置別の字体 -> 親の康熙部首。部首の入力欄で 人 と打っても 亻 に当てるのに使う')
+    out.append('    const RADICAL_FAMILY = ' + json.dumps(VARIANTS, ensure_ascii=False) + ';')
     out.append('    ' + MARK_END)
     return '\n'.join(out)
 
@@ -297,10 +311,10 @@ def apply(ids_path, html_path, mm):
     # 対象字は mjmap.json から取る。jis は面区点を持つ10,054字で、記号を除くと第1〜4水準になる
     jis_chars = sorted({c for _, c in mm['jis'] if c not in SYMBOLS})
     gaiji_chars = sorted({m[1][0] for m in mm['mj'] if m[1]} - set(jis_chars) - SYMBOLS)
-    table, gaiji, readings, n_real, compound, selfref = build(ids, jis_chars, gaiji_chars)
+    table, gaiji, readings, n_real, unplaced, compound, selfref = build(ids, jis_chars, gaiji_chars)
 
     html = open(html_path, encoding='utf-8').read()
-    block = js_block(table, readings, n_real)
+    block = js_block(table, readings, n_real, unplaced)
     i, j = html.index(MARK_BEGIN), html.index(MARK_END) + len(MARK_END)
     open(html_path, 'w', encoding='utf-8').write(html[:i] + block.lstrip() + html[j:])
     mm['radicals'] = gaiji
