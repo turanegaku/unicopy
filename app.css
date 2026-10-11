@@ -10,7 +10,7 @@
     .tab-content.active { display: block; }
 
     /* 検索コンテナ */
-    .search-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+    .search-container { background: #fff; padding: 20px; border-radius: 6px; border: 1px solid #e4e4e4; margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
     .clear-btn { padding: 10px 20px; font-size: 1rem; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     .clear-btn:hover { background: #c0392b; }
 
@@ -56,8 +56,8 @@
     .grid { position: relative; margin-bottom: 6px; }
     /* 絶対配置にするのは一覧のカードだけ。変体仮名の .card は通常のフローのまま */
     .grid .card { position: absolute; box-sizing: border-box; }
-    .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 5px; text-align: center; cursor: pointer; position: relative; transition: transform 0.1s, box-shadow 0.1s; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-    .card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); background: #ebf5fb; }
+    .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 5px; text-align: center; cursor: pointer; position: relative; transition: transform 0.1s, border-color 0.1s; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .card:hover { transform: translateY(-2px); border-color: #3498db; background: #ebf5fb; }
     /* 区の切れ目を示すラベル。カードの外枠に重ねるだけでレイアウトの高さには影響しない */
     .ku-tag { position: absolute; top: -8px; left: 4px; font-size: 0.6rem; line-height: 1; color: #999; background: #f9f9f9; padding: 0 3px; pointer-events: none; }
     /* 漢字カードは水準ごとに上端4pxだけ色を付ける(点数バッジの代わり) */
@@ -86,13 +86,13 @@
     .hentai-meta { font-size: 0.75rem; color: #666; display: flex; flex-direction: column; gap: 2px; }
     .hentai-meta span { background: #eee; padding: 2px 5px; border-radius: 3px; }
 
-    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 20px; display: none; z-index: 1000; font-size: 0.9rem; }
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 6px; display: none; z-index: 1000; font-size: 0.9rem; }
     .empty-msg { text-align: center; color: #999; padding: 10px; font-size: 1.1rem; grid-column: 1 / -1; }
 
     /* ================= 縮退ツリー窓 ================= */
     /* ツリーOFFのときはページスクロールのまま＝従来の index.html と同じ挙動。
        ONのときだけ一覧を独立したスクロールコンテナにしてツリーと縦位置を同期させる。 */
-    .tree-bar { background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 14px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    .tree-bar { background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #e4e4e4; margin-bottom: 14px; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
     .bar-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .bar-label { font-weight: bold; color: #95a5a6; font-size: 0.72rem; letter-spacing: 1px; }
     /* 移動・絞り込み・検索は「ラベル | 中身」の2列グリッドに揃える。
@@ -109,7 +109,7 @@
     #searchRow .status { grid-column: 1; }
     /* 一覧の見出しへ飛ぶチップ。54,402枚をスクロールで辿らずに済ませる */
     .jump-row .row-body { gap: 6px; }
-    .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 12px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
+    .jump-chip { padding: 3px 10px; border: 1px solid #e4e4e4; border-radius: 6px; background: #fff; cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: bold; }
     .jump-chip:not(:disabled):hover { background: #f4f9fd; border-color: currentColor; }
     .jump-chip:disabled { color: #b2bec3; cursor: default; }
     .jump-chip .n { color: #b2bec3; font-weight: normal; margin-left: 4px; }
@@ -166,7 +166,7 @@
 
     #kanjiPanes { display: flex; gap: 12px; align-items: stretch; }
     #kanjiContainer { flex: 1; min-width: 0; }
-    #treePane { display: none; flex: 0 0 470px; overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; }
+    #treePane { display: none; flex: 0 0 470px; overflow: auto; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; }
 
     /* ツリーONのときは2つのペインを sticky で画面いっぱいに貼り付ける。
        ページ自体は普通にスクロールし、ヘッダと部首フィルタは上へ流れて消える。
