@@ -101,7 +101,7 @@
        各行が別のグリッドなので auto にすると行ごとに幅が変わり、中身の左端が揃わない。 */
     .find-row { display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: center; width: 100%; }
     .find-row > .row-body { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
-    .find-row input[type="text"] { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; font-size: 0.95rem; }
+    .find-row input[type="text"] { box-sizing: border-box; width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; font-size: 0.95rem; }
     .find-row input[type="text"]:focus { outline: none; border-color: #3498db; }
     .find-row .status { grid-column: 2; color: #7f8c8d; font-size: 0.8rem; min-height: 1em; }
     /* 検索はラベルを placeholder に畳んだので、1列にして容器の幅いっぱいまで広げる */
