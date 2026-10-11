@@ -3,7 +3,7 @@
 
   python3 tools/build-mjmap.py mji.00602.xlsx MJShrinkMap.1.2.0.json --ids ids.txt --unihan Unihan.zip -o mjmap.json
 
---ids を渡すと、tools/build_radicals.py で部首索引（app.js の水準字ぶん・mjmap.json の外字ぶん）も作る。
+--ids を渡すと、tools/build_radicals.py で部品の枠の束に並べるチップ（app.js）も作る。
 さらに --unihan を渡すと、tools/build_parts.py で部品の枠のデータ（parts.js・mjmap.json）も作る。
 
 xlsx は字形(IVS)を、縮退マップは縮退グラフを持つ。両者は MJ文字図形名で 1:1 に対応する。
@@ -250,26 +250,26 @@ def main():
     p.add_argument('xlsx', help='MJ文字情報一覧表 (mji.*.xlsx)')
     p.add_argument('shrink', help='MJ縮退マップ (MJShrinkMap.*.json)')
     p.add_argument('-o', '--out', default='mjmap.json')
-    p.add_argument('--ids', help='IDSファイル (ids.txt)。渡すと部首索引も作る（tools/build_radicals.py）')
+    p.add_argument('--ids', help='IDSファイル (ids.txt)。渡すと束のチップも作る（tools/build_radicals.py）')
     p.add_argument('--unihan', help='Unihan.zip。--ids と一緒に渡すと部品の枠のデータも作る（tools/build_parts.py）')
     a = p.parse_args()
 
     data = build(a.xlsx, a.shrink, read_kyuujitai(KYUUJITAI_MD))
-    # 外字の部首索引は mjmap.json に同居する。作り直すたびにここで足さないと索引が落ちたまま残る
-    # （CJK拡張C × 人偏 で 𪜸 が消えた）。水準字ぶんは app.js に書き戻す
+    # 部品の枠の外字ぶん（ids / dictRadicals）は mjmap.json に同居する。作り直すたびにここで足さないと
+    # 落ちたまま残る（以前の部首索引で CJK拡張C × 人偏 の 𪜸 が消えた）。水準字ぶんは parts.js と app.js に書き戻す
     if a.ids:
         here = pathlib.Path(__file__).resolve().parent
         sys.path.insert(0, str(here))
         import build_radicals
         build_radicals.apply(a.ids, str(here.parent / 'app.js'), data)
-        # 部品の枠も外字ぶん（ids / dictRadicals）を mjmap.json に持つので、部首索引と同じ理由でここで足す
+        # 外字ぶんの IDS と辞書の部首は mjmap.json に持つので、作り直すたびにここで足す
         if a.unihan:
             import build_parts
             build_parts.apply(a.ids, a.unihan, str(here.parent / 'parts.js'), data)
         else:
             print(f'warn: --unihan を渡していないので {a.out} に部品の枠のデータが無い', file=sys.stderr)
     else:
-        print(f'warn: --ids を渡していないので {a.out} に部首索引が無い', file=sys.stderr)
+        print(f'warn: --ids を渡していないので {a.out} に部品の枠のデータが無い', file=sys.stderr)
     with open(a.out, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
 

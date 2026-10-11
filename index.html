@@ -2,13 +2,14 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>JIS漢字 ＆ 変体仮名 ワンクリックコピーツール</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Hentaigana:wght@400;700&family=Noto+Serif+JP:wght@400;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
 
-  <h1>🌟 JIS漢字 ＆ 変体仮名 コピーツール</h1>
+  <h1>JIS漢字 ＆ 変体仮名 コピーツール</h1>
 
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('kanji')">漢字モード</button>
@@ -30,7 +31,7 @@
         <span class="bar-label">縮退の根拠</span>
         <span id="srcSwitches"></span>
       </div>
-      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)　／　部首は <a href="https://github.com/cjkvi/cjkvi-ids" target="_blank" rel="noopener">CJKVI IDS</a>（CHISE IDS Database）</span></div>
+      <div class="legend"><b>実線</b>=規格　<b class="kj">橙</b>=<a href="https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/" target="_blank" rel="noopener">常用漢字表</a>の新旧字体　<b class="law">破線</b>=法令・告示<span class="credit">　／　文字情報基盤 <a href="https://moji.or.jp/mojikiban/mjlist/" target="_blank" rel="noopener">MJ文字情報一覧表</a>・<a href="https://moji.or.jp/mojikiban/map/" target="_blank" rel="noopener">MJ縮退マップ</a> (IPA, CC BY-SA 2.1 JP)　／　部首は <a href="https://github.com/cjkvi/cjkvi-ids" target="_blank" rel="noopener">CJKVI IDS</a>（CHISE IDS Database）・辞書の部首は <a href="https://www.unicode.org/charts/unihan.html" target="_blank" rel="noopener">Unihan</a></span></div>
     </div>
     <div class="search-container" id="radicalListboxes">
       <div class="find-row jump-row">
@@ -50,6 +51,7 @@
         <span class="status" id="mjmapStatus"></span>
       </div>
     </div>
+    <div class="cond-bar" id="condBar" aria-live="polite"></div>
     <div id="kanjiPanes">
       <div id="kanjiContainer"></div>
       <div id="treePane"><div class="tree-empty">縮退データ未読込</div></div>

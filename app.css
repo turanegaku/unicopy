@@ -16,42 +16,93 @@
 
     /* 検索コンテナ */
     .search-container { background: #fff; padding: 20px; border-radius: 6px; border: 1px solid #e4e4e4; margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
-    .clear-btn { padding: 10px 20px; font-size: 1rem; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-    .clear-btn:hover { background: #c0392b; }
 
-    /* 構成要素ごとの部首チップ。複数選べて、選んだぶんはANDで絞る（旁が刂で脚が心、のように引ける） */
-    .radical-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; width: 100%; }
-    .radical-group { border: 2px solid #ddd; border-radius: 6px; padding: 6px 8px 8px; transition: border-color 0.2s; }
-    .radical-group:has(input:checked) { border-color: #3498db; }
-    .radical-group legend { font-size: 0.85rem; font-weight: bold; color: #555; padding: 0 4px; }
-    /* グリフのみ表示（3行程度に収まる高さ）。読みは title属性のネイティブツールチップで表示 */
-    .chip-row { display: flex; flex-wrap: wrap; gap: 5px; max-height: 116px; overflow-y: auto; }
-    .radical-chip { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; font-family: "Noto Serif JP", serif; font-size: 1.15rem; }
-    .radical-chip:hover { background: #ebf5fb; }
-    /* 件数の先読み。グリフの角に添えるだけなので、数字は等幅のほうの書体で小さく置く */
-    .radical-chip { position: relative; }
-    .radical-chip .n { position: absolute; right: 2px; bottom: 1px; font: 0.55rem/1 ui-monospace, monospace; color: #666; pointer-events: none; }
-    .radical-chip:has(input:checked) .n { color: #fff; }
-    .radical-chip.zero { opacity: 0.4; }
+    /* 部品の枠。枠のどこを指すかで位置を選び、その側に束（チップの popover）を開く。
+       寸法は parts.js の BOX と合わせる（176px 角、構は枠の外 16px まで指せる） */
+    .pbox-area { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+    .pbox { position: relative; }
+    .pbox-hit { padding: 16px; cursor: crosshair; touch-action: manipulation; }
+    .pbox-frame { position: relative; width: 176px; height: 176px; background: #fff; border: 1px solid #ccc; }
+    .pbox-frame svg { position: absolute; inset: 0; width: 176px; height: 176px; }
+    .pbox-guides { stroke: #e4e4e4; stroke-width: 1; fill: none; display: none; }
+    .pbox-fills path { fill: rgba(52, 152, 219, 0.10); fill-rule: evenodd; }
+    .pbox-shape { fill: rgba(52, 152, 219, 0.12); stroke: #3498db; stroke-width: 2; stroke-dasharray: 5 4; fill-rule: evenodd; }
+    /* SVG の要素には HTML の [hidden] の既定が効かない */
+    .pbox-shape[hidden] { display: none; }
+    .pbox-glyphs span { position: absolute; transform: translate(-50%, -50%); font-family: "Noto Serif JP", serif; line-height: 1; color: #2c3e50; pointer-events: none; }
+    /* キーボード用の区画ボタン。どこを指しているかは点線のプレビューが見せるので、ボタン自体は見せない */
+    .pbox-keys button { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+    .pbox-frame:has(.pbox-keys button:focus-visible) { outline: 2px solid #3498db; outline-offset: 2px; }
+    .pbox-label { min-height: 1.4em; font-size: 0.85rem; font-weight: bold; color: #3498db; }
+    .pbox-extra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+    .pbox-btn, .cond, .cond-clear { padding: 4px 12px; border: 1px solid #ddd; border-radius: 5px; background: #fff; font: inherit; font-size: 0.85rem; cursor: pointer; }
+    .pbox-btn:hover, .cond:hover, .cond-clear:hover { background: #ebf5fb; }
+    .pbox-btn[aria-pressed="true"] { border-color: #3498db; color: #3498db; }
+    .cond b { font-family: "Noto Serif JP", serif; font-size: 1rem; }
+
+    /* 条件の帯。絞り込みの枠の外、一覧の上に貼り付け、一覧を送っても条件と件数が見えるようにする。
+       高さを固定し、水準の見出し（同じく sticky）はその下に止める */
+    :root { --cond-bar-h: 48px; }
+    .cond-bar { position: sticky; top: 0; z-index: 8; height: var(--cond-bar-h); box-sizing: border-box; margin-bottom: 8px; padding: 0 8px; display: flex; align-items: center; gap: 8px; overflow-x: auto; white-space: nowrap; background: #f9f9f9; border-bottom: 1px solid #e4e4e4; }
+    .cond-bar .n { font-family: ui-monospace, monospace; font-size: 0.85rem; color: #555; }
+    .cond-bar .note { font-size: 0.8rem; color: #7f8c8d; }
+    .cond-clear { margin-left: auto; }
+    /* ツリーONのときはペインが画面いっぱいに貼り付くので、帯は流れの中に置く */
+    body.tree-on .cond-bar { position: static; }
+    .zero-tips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; font-size: 0.9rem; }
+    /* ホバーの無い端末では、指す前に区画が分からないので境界線を常に出す */
+    @media (hover: none) { .pbox-guides { display: inline; } }
+
+    /* 束。指した位置の側に枠へ重ねて開く（流れに入れると枠がずれ、カーソルが枠から外れる）。
+       重なって前に出る面なので、候補リストと同じく影を付ける */
+    .palette { position: absolute; z-index: 20; width: 272px; max-height: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #fff; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
+    .palette[hidden] { display: none; }
+    .palette[data-side="left"]  { right: calc(100% + 8px); top: 0; }
+    .palette[data-side="right"] { left: calc(100% + 8px); top: 0; }
+    .palette[data-side="left"][data-align="bottom"] { top: auto; bottom: 0; }
+    .palette[data-side="top"]    { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 352px; }
+    .palette[data-side="bottom"] { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 352px; }
+    .pal-head { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+    .pal-now { color: #555; font-family: "Noto Serif JP", serif; }
+    .pal-clear { margin-left: auto; padding: 2px 8px; border: 1px solid #ddd; border-radius: 5px; background: #fff; font: inherit; font-size: 0.8rem; cursor: pointer; }
+    .pal-close { margin-left: auto; padding: 0 4px; border: none; background: none; color: #7f8c8d; font-size: 1.1rem; cursor: pointer; }
+    .pal-clear + .pal-close { margin-left: 0; }
+    .pal-find { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; font: inherit; font-size: 0.95rem; }
+    .pal-find:focus { outline: none; border-color: #3498db; }
+    .pal-direct:empty { display: none; }
+    .pal-direct-btn { width: 100%; padding: 6px 8px; border: 1px dashed #3498db; border-radius: 5px; background: #fff; color: #3498db; font: inherit; text-align: left; cursor: pointer; }
+    .pal-direct-btn:disabled { opacity: 0.4; cursor: default; }
+    .pal-chips { display: grid; grid-template-columns: repeat(auto-fill, 40px); gap: 4px; overflow-y: auto; min-height: 0; }
+    .pchip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 48px; padding: 0; border: 1px solid #ddd; border-radius: 5px; background: #fff; cursor: pointer; }
+    .pchip:hover { background: #ebf5fb; }
+    .pchip .g { font-family: "Noto Serif JP", serif; font-size: 1.2rem; line-height: 1.2; }
+    /* 件数の先読み。11px より小さくしない */
+    .pchip .n { font: 11px/1 ui-monospace, monospace; color: #555; font-variant-numeric: tabular-nums; }
+    .pchip.zero { opacity: 0.4; }
+    .pchip[aria-selected="true"] { background: #3498db; border-color: #3498db; color: #fff; }
+    .pchip[aria-selected="true"] .n { color: #fff; }
+    .pal-more { align-self: flex-start; padding: 0; border: none; background: none; color: #3498db; font: inherit; font-size: 0.85rem; cursor: pointer; }
+    /* 狭い画面では枠の横に束を置く幅が無いので、その方向から画面へ滑り込むパネルにする。
+       位置と方向の対応は、どこから入ってくるかで保つ */
+    @media (max-width: 640px) {
+      .palette { position: fixed; width: auto; max-height: none; border-radius: 0; transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
+      .palette[data-side="left"], .palette[data-side="left"][data-align] { top: 0; bottom: 0; left: 0; right: auto; width: min(320px, 88vw); transform: translateX(-100%); }
+      .palette[data-side="right"]  { top: 0; bottom: 0; right: 0; left: auto; width: min(320px, 88vw); transform: translateX(100%); }
+      .palette[data-side="top"]    { top: 0; left: 0; right: 0; bottom: auto; width: auto; max-height: 70vh; transform: translateY(-100%); }
+      .palette[data-side="bottom"] { bottom: 0; left: 0; right: 0; top: auto; width: auto; max-height: 70vh; transform: translateY(100%); }
+      .palette.open { transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { .palette { transition: none; } }
     /* 字から引いた構成。押されている＝その部品を条件に入れている */
     .char-parts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; font-size: 0.85rem; color: #555; }
     .char-parts[hidden] { display: none; }
     .char-parts button { padding: 3px 8px; border: 1px solid #ddd; border-radius: 5px; background: #fff; font-family: "Noto Serif JP", serif; font-size: 0.95rem; cursor: pointer; }
     .char-parts button:hover { background: #ebf5fb; }
     .char-parts button[aria-pressed="true"] { background: #3498db; color: #fff; border-color: #3498db; }
-    .chip-find { box-sizing: border-box; width: 100%; margin-bottom: 5px; padding: 3px 6px; border: 1px solid #ddd; border-radius: 5px; font-family: inherit; font-size: 0.85rem; }
-    .chip-find:focus { outline: none; border-color: #3498db; }
-    .radical-chip[hidden] { display: none; }
-    /* 伝統的な部首名を持たない、IDSの分解から出ただけの構成部品。後ろに並べ、枠線だけ点線にする
-       （字まで薄くすると肝心のグリフが読みにくい） */
-    .radical-chip.sub { border-style: dashed; }
-    .radical-chip.sub:has(input:checked) { border-style: solid; }
-    .radical-chip:has(input:checked) { background: #3498db; color: #fff; border-color: #3498db; }
-    .radical-chip input { display: none; }
 
     /* 漢字グリッド */
     /* 水準の区切り。スクロールしても常に見えるようsticky固定し、下線を水準色に */
-    .level-separator { position: sticky; top: 0; z-index: 5; background: #f9f9f9; text-align: center; font-size: 1.4rem; font-weight: bold; padding: 14px 0 10px; margin: 30px 0 16px 0; color: #2c3e50; border-bottom: 3px solid #e5e5e5; }
+    .level-separator { position: sticky; top: var(--cond-bar-h); z-index: 5; background: #f9f9f9; text-align: center; font-size: 1.4rem; font-weight: bold; padding: 14px 0 10px; margin: 30px 0 16px 0; color: #2c3e50; border-bottom: 3px solid #e5e5e5; }
     .level-separator span { display: inline-block; position: relative; padding: 0 15px; }
     .level-separator span::before, .level-separator span::after { content: ""; position: absolute; top: 50%; width: 100px; height: 2px; background-color: #bdc3c7; }
     .level-separator span::before { right: 100%; margin-right: 15px; }
@@ -76,19 +127,6 @@
     /* 絶対配置にするのは一覧のカードだけ。変体仮名の .card は通常のフローのまま */
     .grid .card { position: absolute; box-sizing: border-box; }
     .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 5px; text-align: center; cursor: pointer; position: relative; transition: transform 0.1s, border-color 0.1s; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-    /* 選んだ部品がカードのどこにあるか。へん=左半分、つくり=右半分、冠=上半分、脚=下半分、
-       構=枠、垂=上と左、繞=下と左。位置が形で分かるので、色は選択中のチップと同じ青の薄塗りでよい */
-    .card .hl { position: absolute; pointer-events: none; background: rgba(52, 152, 219, 0.22); }
-    /* 半分ずつの塗りは間を空けて2枚の板にする。へん+つくり を両方選ぶと塗りが繋がって
-       カード全体が選択中に見えるので、板の境が配置の図として読めるようにする */
-    .card .hl-l { left: 3px; top: 3px; bottom: 3px; width: calc(50% - 4px); }
-    .card .hl-r { right: 3px; top: 3px; bottom: 3px; width: calc(50% - 4px); }
-    .card .hl-t { left: 3px; right: 3px; top: 3px; height: calc(50% - 4px); }
-    .card .hl-b { left: 3px; right: 3px; bottom: 3px; height: calc(50% - 4px); }
-    .card .hl-o { inset: 0; background: none; border: 4px solid rgba(52, 152, 219, 0.35); }
-    .card .hl-tl { inset: 0; background: none; border-top: 4px solid rgba(52, 152, 219, 0.35); border-left: 4px solid rgba(52, 152, 219, 0.35); }
-    .card .hl-bl { inset: 0; background: none; border-bottom: 4px solid rgba(52, 152, 219, 0.35); border-left: 4px solid rgba(52, 152, 219, 0.35); }
-    .card .char-main { position: relative; }
     .card:hover { transform: translateY(-2px); border-color: #3498db; background: #ebf5fb; }
     /* 区の切れ目を示すラベル。カードの外枠に重ねるだけでレイアウトの高さには影響しない */
     .ku-tag { position: absolute; top: -8px; left: 4px; font-size: 0.6rem; line-height: 1; color: #999; background: #f9f9f9; padding: 0 3px; pointer-events: none; }
@@ -204,9 +242,6 @@
        ページ自体は普通にスクロールし、ヘッダと部首フィルタは上へ流れて消える。
        そのぶんペインは常に画面の高さいっぱいを使える。 */
     body.tree-on #kanjiPanes { position: sticky; top: 8px; height: calc(100vh - 16px); }
-    /* ツリーONのときに縮めるのは部首のグリッドだけ。容器ごと縮めると、
-       グリッドの下に置いた検索欄とCLEARがスクロールの外へ隠れてしまう */
-    body.tree-on .radical-grid { max-height: 28vh; overflow-y: auto; }
     /* 左右の余白はハイライトのリング(3px)が overflow で切られないため */
     body.tree-on #kanjiContainer { overflow-y: auto; overflow-x: hidden; padding: 0 5px; }
     /* 変体仮名も同じように貼り付ける。ページごと流すと五十音10段で5千px超になり、
@@ -250,3 +285,6 @@
     /* 右クリックで飛んだ先を1秒だけ水準色のリングで示す */
     .card.flash { box-shadow: 0 0 0 3px var(--flash); background: #fffdf0; }
     .tree-empty { padding: 20px; color: #999; font-size: 0.85rem; text-align: center; }
+
+    /* 条件の帯が無いところ（ツリーONの一覧ペイン、変体仮名）では見出しを上端に止める */
+    body.tree-on .level-separator, #hentaiganaContainer .level-separator { top: 0; }
