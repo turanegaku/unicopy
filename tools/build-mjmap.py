@@ -45,6 +45,13 @@ SRC_BITS = [
     ('法務省告示582号別表第四', None, None, '法務省告示582号別表第四'),
     ('辞書類等による関連字', None, None, '辞書類等による関連字'),
     ('読み・字形による類推', None, None, '読み・字形による類推'),
+    # 親字・正字の縮退先のうち、その MJ で一番近いホップ数より遠いもの（親字の親字）。
+    # 縮退マップは親字の繋がりを JIS の字に届いた段だけ載せ、途中の字は載せない。
+    # MJ000050 は 1 ホップで 侮(FA30)、2 ホップで 侮(4FAE) で、遠い方まで親字・正字にすると
+    # 両方へ直接縮退するように見えるので、別の根拠に分ける。一番近いのが 2 ホップの MJ（784）は
+    # 途中の字が JIS に無いだけなので、その 2 ホップ目を親字・正字のままにする。
+    # 古い mjmap.json と並びを変えないよう、新しいビットは末尾に足す
+    ('法務省戸籍法関連通達・通知', '戸籍統一文字情報 親字・正字', 'far', '戸籍統一文字情報 親字の親字（2段以上）'),
 ]
 # 面区点を集めるときに見るキー（種別の違いは同じキーの中なので重複を除く）
 SRC_KEYS = list(dict.fromkeys(k for k, _, _, _ in SRC_BITS if k))
@@ -186,18 +193,25 @@ def build(xlsx_path, shrink_path, kyuujitai):
 
     # (MJ, 縮退先) の重複を潰し、根拠はビットにまとめる
     pairs = {}
+    SEIJI = '戸籍統一文字情報 親字・正字'
     for item in shrink['content']:
         i = index_of.get(item['MJ文字図形名'])
         if i is None:
             print(f"warn: {item['MJ文字図形名']} は xlsx に無い", file=sys.stderr)
             continue
+        hops = [c['ホップ数'] for c in item.get('法務省戸籍法関連通達・通知', []) if c.get('種別') == SEIJI]
+        near = min(hops) if hops else None
         for si, (key, kind, fuki, _) in enumerate(SRC_BITS):
             if key is None:
                 continue
             for c in item.get(key, []):
                 if kind is not None and c.get('種別') != kind:
                     continue
-                if fuki is not None and c.get('付記') != fuki:
+                if kind == SEIJI:
+                    # 親字・正字は一番近いホップ数だけ、それより遠いものは「親字の親字」へ
+                    if (fuki == 'far') != (c['ホップ数'] > near):
+                        continue
+                elif fuki is not None and c.get('付記') != fuki:
                     continue
                 k = (i, jis_idx[c['JIS X 0213']])
                 pairs[k] = pairs.get(k, 0) | (1 << si)

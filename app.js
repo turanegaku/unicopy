@@ -1126,22 +1126,29 @@
        強い順に並べてあり、線種は立っている根拠のうち一番強いもので決める。
        tier 0=実線（規格）、1=破線（法令・告示）、2=点線（辞書・類推）。新旧字体は橙の実線。
        常用漢字表の新旧字体は戸籍法通達の部分集合ではない（包摂や582号だけで繋がる組が7本ある）
-       ので独立したビットを持ち、強さの順どおり包摂の次に置いてある。 */
+       ので独立したビットを持ち、強さの順どおり包摂の次に置いてある。
+       並びは強さの順で、ビットの番号（b）は mjmap.json の meta.bits の並び。親字の親字は後から足した
+       ビットなので番号は末尾だが、強さは親字・正字の次に置く。古い mjmap.json にはこのビットが無く、
+       遠い親字も親字・正字に入ったまま読める。 */
     const SRC = [
-      { id: "srcJis",    label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
-      { id: "srcKyuu",   label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（364組）" },
-      { id: "srcSeiji",  label: "親字・正字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字（16,305本）" },
-      { id: "srcZoku",   label: "俗字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち俗字（233本）と、同日の民二5202号通知別表 正字・俗字等対照表（138本）。漢和辞典に俗字として載る同字の異体で、戸籍にそのまま残せる" },
+      { id: "srcJis",    b: 1,  label: "包摂・統合", tier: 0, on: true,  title: "JIS包摂規準・UCS統合規則。規格の上で同じ文字とされる関係（14,515本）" },
+      { id: "srcKyuu",   b: 2,  label: "新旧字体",   tier: 0, on: true, kj: true, title: "常用漢字表（平成22年内閣告示第2号）のいわゆる康熙字典体。橙の実線で描く（364組）" },
+      { id: "srcSeiji",  b: 3,  label: "親字・正字", tier: 1, on: false, group: "戸籍", title: "法務省戸籍法関連通達・通知／戸籍統一文字情報 親字・正字。その字形から親字をたどって一番近くで届く JIS の字（14,908本）。それより先（2段以上）で届く字も点線で出す（3,132本）" },
+      // 親字・正字の縮退先のうち、一番近い段より遠いもの。MJ000050 は 1 段で 侮(FA30)、2 段で 侮(4FAE)。
+      // 遠い方を同じ根拠にすると両方へ直接縮退するように見えるので、ビットは分けて点線で描く。
+      // 入り切りは親字・正字のチップに畳む（2 段先にも繋がっていることは、点線と根拠の説明で分かる）
+      { id: "srcSeiji2", b: 11, label: "親字の親字", tier: 2, on: false, group: "戸籍", chip: "srcSeiji", title: "戸籍統一文字情報 親字・正字のうち、一番近い親字よりさらに先（2段以上）で届く JIS の字（3,132本）" },
+      { id: "srcZoku",   b: 4,  label: "俗字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち俗字（233本）と、同日の民二5202号通知別表 正字・俗字等対照表（138本）。漢和辞典に俗字として載る同字の異体で、戸籍にそのまま残せる" },
       // 5202号の対照表は同日の依命通知の別表で、138本のうち120本は上の俗字と重なる。俗字のチップに畳む
-      { id: "srcZokuji", label: "正字・俗字", tier: 1, on: false, group: "戸籍", chip: "srcZoku", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
-      { id: "srcGoji",   label: "誤字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち無印＝誤字。辞書に無い誤った字体で、職権で正字に訂正される（618本）" },
-      { id: "srcBetsu",  label: "別字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち別字。正字とは別の字だが混用されているもので、申出で正字に訂正できる（150本）" },
-      { id: "src582",    label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等に係る漢字氏名の表記（12,568本）" },
+      { id: "srcZokuji", b: 5,  label: "正字・俗字", tier: 1, on: false, group: "戸籍", chip: "srcZoku", title: "法務省戸籍法関連通達・通知／民二5202号通知別表 正字・俗字等対照表（138本）" },
+      { id: "srcGoji",   b: 6,  label: "誤字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち無印＝誤字。辞書に無い誤った字体で、職権で正字に訂正される（618本）" },
+      { id: "srcBetsu",  b: 7,  label: "別字",       tier: 1, on: false, group: "戸籍", title: "民一2842号通達別表 誤字俗字・正字一覧表のうち別字。正字とは別の字だが混用されているもので、申出で正字に訂正できる（150本）" },
+      { id: "src582",    b: 8,  label: "告示582号",  tier: 1, on: false, title: "法務省告示582号別表第四。在留カード等に係る漢字氏名の表記（12,568本）" },
       // 辞書・類推は縮退の根拠としては弱すぎて常用しないので、データには持つがチップは出さない
-      { id: "srcDict",   label: "辞書",       tier: 2, on: false, hidden: true, title: "辞書類等による関連字（15,958本）" },
-      { id: "srcGuess",  label: "読み・字形", tier: 2, on: false, hidden: true, title: "読み・字形による類推（413本）" },
+      { id: "srcDict",   b: 9,  label: "辞書",       tier: 2, on: false, hidden: true, title: "辞書類等による関連字（15,958本）" },
+      { id: "srcGuess",  b: 10, label: "読み・字形", tier: 2, on: false, hidden: true, title: "読み・字形による類推（413本）" },
     ];
-    SRC.forEach((s, i) => s.bit = 1 << (i + 1));
+    SRC.forEach(s => s.bit = 1 << s.b);
     const BIT_REP = 1;
     const BIT_KYUUJITAI = SRC.find(s => s.kj).bit;
     const srcMask = () => SRC.reduce((m, s) => m | (s.on ? s.bit : 0), 0);
@@ -1256,8 +1263,23 @@
        区分0は1つの面区点に複数あることがあり（10,909本／10,054面区点、785面区点が2つ以上）、
        愛(1-16-06) は MJ011751(E0102) と MJ011752(E0101) の両方が区分0だが、
        「実装したUCS」を持つ MJ011752 だけが正字として bit0 を持つ。 */
+    /* 親字の親字の根拠の説明。近い親字の字（A）の正字が、その字へ親字・正字で繋がっていれば
+       「A を経て」と添える（MJ000050 → 侮(FA30) → 侮(4FAE)）。途中の字が JIS に無いものは段だけ言う */
+    const SEIJI = SRC.find(s => s.id === 'srcSeiji'), SEIJI2 = SRC.find(s => s.id === 'srcSeiji2');
+    let repByJi = new Map();
+    function farLabel(mi, ji, es) {
+      for (const [aj, e] of es) {
+        if (!(e.bits & SEIJI.bit)) continue;
+        const r = repByJi.get(aj);
+        const re = r == null ? null : mjmap.mj[r][2].find(([j]) => j === ji);
+        // 侮(FA30) と 侮(4FAE) のように見分けにくい字もあるので、面区点も添える
+        if (re && re[1] & SEIJI.bit) return `親字の親字（${jisCh[aj]} ${mjmap.jis[aj][0]} を経て）`;
+      }
+      return '親字の親字（2段以上）';
+    }
     function buildEdges() {
       candByMj.clear(); mjByChar.clear();
+      repByJi = new Map([...repOf].map(([mi, ji]) => [ji, mi]));
       shrinkChars.clear();
       const mask = srcMask();
       // MJ index -> Map(面区点の添字 -> { on: 立っている根拠のビット, bits: 元のビット, kt: 派生した新旧字体の段 })
@@ -1293,7 +1315,7 @@
           let kj = !!((on || bits) & BIT_KYUUJITAI);
           if (kt != null && kt <= tier) { tier = kt; kj = kt === 0; }
           // 線の tooltip に出す根拠。選んでいる根拠と、正字・派生した新旧字体
-          const why = SRC.filter(x => on & x.bit).map(x => x.label);
+          const why = SRC.filter(x => on & x.bit).map(x => x === SEIJI2 ? farLabel(mi, ji, es) : x.label);
           if (bits & BIT_REP) why.unshift("JIS例示字形");
           if (kt != null && !(on & BIT_KYUUJITAI)) why.push(`新旧字体（${via} を経て）`);
           push(candByMj, mi, [ji, tier, kj, !!(bits & BIT_REP), why.join("・")]);
