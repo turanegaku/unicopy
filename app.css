@@ -152,8 +152,6 @@
        重なって前に出る面なので、候補リストと同じく影を付ける */
     .palette { position: absolute; z-index: 40; width: 272px; max-height: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
     .palette[hidden] { display: none; }
-    /* 束を画面に入れるとき（scrollIntoView）、上端に貼り付いた帯の下に出す */
-    .palette { scroll-margin-top: calc(var(--nav-h) + 8px); }
     /* 開く方向から少し寄ってきて止まる。どこから出た束かが動きで分かる（原則10）。開くときだけ動かす */
     .palette { opacity: 0; transition: opacity 0.12s, translate 0.12s cubic-bezier(.2, 0, 0, 1); }
     .palette.open { opacity: 1; translate: 0 0; }
@@ -179,6 +177,9 @@
     .pal-direct { display: flex; flex-direction: column; gap: 4px; }
     .pal-direct-btn { width: 100%; padding: 6px 8px; border: 1px dashed var(--main); border-radius: 4px; background: var(--surface); color: var(--main); font: inherit; text-align: left; cursor: pointer; }
     .pal-direct-btn:disabled { opacity: 0.4; cursor: default; }
+    /* 候補を端までスクロールしても、その先の本体のページは送らない。
+       見出しや入力の上でも止まるよう、束そのものもスクロールの容器にしておく（候補が縮むので溢れはしない） */
+    .palette, .pal-chips { overflow-y: auto; overscroll-behavior: contain; }
     .pal-chips { display: grid; grid-template-columns: repeat(auto-fill, 40px); gap: 4px; overflow-y: auto; min-height: 0; }
     .pchip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); cursor: pointer; }
     .pchip:hover { background: var(--main-soft); }
@@ -189,18 +190,13 @@
     .pchip[aria-selected="true"] { background: var(--main); border-color: var(--main); color: var(--on-main); }
     .pchip[aria-selected="true"] .n { color: var(--on-main); }
     .pal-more { align-self: flex-start; padding: 0; border: none; background: none; color: var(--main); font: inherit; font-size: var(--fs-2); cursor: pointer; }
-    /* 狭い画面では枠の横に束を置く幅が無いので、その方向から画面へ滑り込むパネルにする。
-       位置と方向の対応は、どこから入ってくるかで保つ */
+    /* 狭い画面では枠の横に束を置く幅が無いので、画面の下から滑り込むシートにする。
+       区画ごとに出る方向を変えると、親指の届かない上端や片側に束が出るので、方向は1つに揃える。
+       どの区画の束かは見出しで示す */
     @media (max-width: 640px) {
-      .palette, .palette:not(.open) { position: fixed; width: auto; max-height: none; opacity: 1; translate: none; transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
-      .palette[data-side="left"] { top: 0; bottom: 0; left: 0; right: auto; width: min(320px, 88vw); transform: translateX(-100%); }
-      /* デスクトップの垂・繞の上下寄せ（[data-align]）は打ち消すだけにする。ここで transform まで書くと、
-         詳細度が .open より高くなり、開いても画面の外に残る */
-      .palette[data-side="left"][data-align] { top: 0; bottom: 0; }
-      .palette[data-side="right"]  { top: 0; bottom: 0; right: 0; left: auto; width: min(320px, 88vw); transform: translateX(100%); }
-      .palette[data-side="top"]    { top: 0; left: 0; right: 0; bottom: auto; width: auto; max-height: 70vh; transform: translateY(-100%); }
-      .palette[data-side="bottom"] { bottom: 0; left: 0; right: 0; top: auto; width: auto; max-height: 70vh; transform: translateY(100%); }
-      .palette.open { transform: none; }
+      .palette, .palette:not(.open) { position: fixed; opacity: 1; translate: none; transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
+      .palette[data-side] { inset: auto 0 0 0; width: auto; max-height: 70vh; transform: translateY(100%); }
+      .palette[data-side].open { transform: none; }
     }
     @media (prefers-reduced-motion: reduce) { .palette { transition: none; } }
     /* 字から引いた構成。押されている＝その部品を条件に入れている */
@@ -300,6 +296,7 @@
     .jump-chip:disabled { color: var(--disabled); cursor: default; }
     .jump-chip .n { color: var(--disabled); font-weight: normal; margin-left: 4px; }
     .legend { font-size: var(--fs-1); color: var(--muted); }
+    .row-body.legend { column-gap: 16px; }
     .legend a { color: var(--muted); }
     .legend b { color: var(--muted); }
     .legend b.kj { color: #e67e22; }
@@ -317,6 +314,17 @@
     .src-chip:has(input:checked) { background: var(--main); border-color: var(--main); color: var(--on-main); }
     .src-chip:has(input:focus-visible) { outline: 2px solid var(--main-strong); outline-offset: 1px; }
     #srcSwitches { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    /* 語の途中で折ると「親字・/正字」「戸/籍」のように縦に崩れるので、チップと見出しは1行に保つ */
+    .src-chip, .src-group > .bar-label, .legend > span { white-space: nowrap; }
+    /* 狭い画面ではラベルの列に 72px を割くと中身が折れて段がばらつく。ラベルを中身の上に置き、
+       左端を容器の端1本に揃える。移動は貼り付いて常に見える帯なので、高さを増やさないようラベルを畳む */
+    @media (max-width: 640px) {
+      .tree-bar { padding: 16px; gap: 16px; }
+      .find-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+      .find-row .status { grid-column: 1; }
+      .jump-bar { padding: 8px 16px; }
+      .jump-bar > .bar-label { display: none; }
+    }
 
     .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: var(--fs-2); }
     /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
