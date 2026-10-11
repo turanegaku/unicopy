@@ -26,7 +26,11 @@
         color-scheme: dark;
       }
     }
-    body { font-family: "Noto Sans JP", sans-serif; font-size: var(--fs-2); max-width: 1200px; margin: 0 auto; padding: 24px 16px; color: var(--fg); background: var(--base); }
+    /* 横方向のはみ出しは切る。束や候補が画面の端から少し出ても、ページが横に送られて全体が寄らないように。
+       hidden と違ってスクロール領域を作らないので、貼り付く帯（sticky）はそのまま効く */
+    html, body { overflow-x: clip; }
+    /* 幅は画面いっぱいに使う（一覧の列数は幅に合わせて増える） */
+    body { font-family: "Noto Sans JP", sans-serif; font-size: var(--fs-2); margin: 0; padding: 24px 16px; color: var(--fg); background: var(--base); }
     /* タイトルとタブはページの顔なので、2つまとめて中央に置く（片方だけ中央にすると揃えの軸が2本になる）。
        その下の帯・一覧は左端を1本に揃える */
     h1 { text-align: center; color: var(--heading); font-size: var(--fs-4); line-height: 1.3; margin: 0 0 16px; text-wrap: balance; word-break: auto-phrase; }
@@ -144,18 +148,19 @@
     @media (hover: none) { .pbox-guides { display: inline; } }
 
     /* 束。指した位置の側に枠へ重ねて開く（流れに入れると枠がずれ、カーソルが枠から外れる）。
+       上端に貼り付くタブ（31）と移動の行（30）より前に出す。
        重なって前に出る面なので、候補リストと同じく影を付ける */
-    .palette { position: absolute; z-index: 20; width: 272px; max-height: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
+    .palette { position: absolute; z-index: 40; width: 272px; max-height: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
     .palette[hidden] { display: none; }
-    /* 束を画面に入れるとき（scrollIntoView）、上端に貼り付いた帯の下に出す */
-    .palette { scroll-margin-top: calc(var(--nav-h) + 8px); }
     /* 開く方向から少し寄ってきて止まる。どこから出た束かが動きで分かる（原則10）。開くときだけ動かす */
     .palette { opacity: 0; transition: opacity 0.12s, translate 0.12s cubic-bezier(.2, 0, 0, 1); }
     .palette.open { opacity: 1; translate: 0 0; }
-    .palette[data-side="left"]:not(.open) { translate: 8px 0; }
-    .palette[data-side="right"]:not(.open) { translate: -8px 0; }
-    .palette[data-side="top"]:not(.open) { translate: 0 8px; }
-    .palette[data-side="bottom"]:not(.open) { translate: 0 -8px; }
+    @media (min-width: 641px) {
+      .palette[data-side="left"]:not(.open) { translate: 8px 0; }
+      .palette[data-side="right"]:not(.open) { translate: -8px 0; }
+      .palette[data-side="top"]:not(.open) { translate: 0 8px; }
+      .palette[data-side="bottom"]:not(.open) { translate: 0 -8px; }
+    }
     .palette[data-side="left"]  { right: calc(100% + 8px); top: 0; }
     .palette[data-side="right"] { left: calc(100% + 8px); top: 0; }
     .palette[data-side="left"][data-align="bottom"] { top: auto; bottom: 0; }
@@ -172,6 +177,9 @@
     .pal-direct { display: flex; flex-direction: column; gap: 4px; }
     .pal-direct-btn { width: 100%; padding: 6px 8px; border: 1px dashed var(--main); border-radius: 4px; background: var(--surface); color: var(--main); font: inherit; text-align: left; cursor: pointer; }
     .pal-direct-btn:disabled { opacity: 0.4; cursor: default; }
+    /* 候補を端までスクロールしても、その先の本体のページは送らない。
+       見出しや入力の上でも止まるよう、束そのものもスクロールの容器にしておく（候補が縮むので溢れはしない） */
+    .palette, .pal-chips { overflow-y: auto; overscroll-behavior: contain; }
     .pal-chips { display: grid; grid-template-columns: repeat(auto-fill, 40px); gap: 4px; overflow-y: auto; min-height: 0; }
     .pchip { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); cursor: pointer; }
     .pchip:hover { background: var(--main-soft); }
@@ -182,15 +190,13 @@
     .pchip[aria-selected="true"] { background: var(--main); border-color: var(--main); color: var(--on-main); }
     .pchip[aria-selected="true"] .n { color: var(--on-main); }
     .pal-more { align-self: flex-start; padding: 0; border: none; background: none; color: var(--main); font: inherit; font-size: var(--fs-2); cursor: pointer; }
-    /* 狭い画面では枠の横に束を置く幅が無いので、その方向から画面へ滑り込むパネルにする。
-       位置と方向の対応は、どこから入ってくるかで保つ */
+    /* 狭い画面では枠の横に束を置く幅が無いので、画面の下から滑り込むシートにする。
+       区画ごとに出る方向を変えると、親指の届かない上端や片側に束が出るので、方向は1つに揃える。
+       どの区画の束かは見出しで示す */
     @media (max-width: 640px) {
-      .palette, .palette:not(.open) { position: fixed; width: auto; max-height: none; opacity: 1; translate: none; transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
-      .palette[data-side="left"], .palette[data-side="left"][data-align] { top: 0; bottom: 0; left: 0; right: auto; width: min(320px, 88vw); transform: translateX(-100%); }
-      .palette[data-side="right"]  { top: 0; bottom: 0; right: 0; left: auto; width: min(320px, 88vw); transform: translateX(100%); }
-      .palette[data-side="top"]    { top: 0; left: 0; right: 0; bottom: auto; width: auto; max-height: 70vh; transform: translateY(-100%); }
-      .palette[data-side="bottom"] { bottom: 0; left: 0; right: 0; top: auto; width: auto; max-height: 70vh; transform: translateY(100%); }
-      .palette.open { transform: none; }
+      .palette, .palette:not(.open) { position: fixed; opacity: 1; translate: none; transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
+      .palette[data-side] { inset: auto 0 0 0; width: auto; max-height: 70vh; transform: translateY(100%); }
+      .palette[data-side].open { transform: none; }
     }
     @media (prefers-reduced-motion: reduce) { .palette { transition: none; } }
     /* 字から引いた構成。押されている＝その部品を条件に入れている */
@@ -290,6 +296,7 @@
     .jump-chip:disabled { color: var(--disabled); cursor: default; }
     .jump-chip .n { color: var(--disabled); font-weight: normal; margin-left: 4px; }
     .legend { font-size: var(--fs-1); color: var(--muted); }
+    .row-body.legend { column-gap: 16px; }
     .legend a { color: var(--muted); }
     .legend b { color: var(--muted); }
     .legend b.kj { color: #e67e22; }
@@ -307,6 +314,17 @@
     .src-chip:has(input:checked) { background: var(--main); border-color: var(--main); color: var(--on-main); }
     .src-chip:has(input:focus-visible) { outline: 2px solid var(--main-strong); outline-offset: 1px; }
     #srcSwitches { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    /* 語の途中で折ると「親字・/正字」「戸/籍」のように縦に崩れるので、チップと見出しは1行に保つ */
+    .src-chip, .src-group > .bar-label, .legend > span { white-space: nowrap; }
+    /* 狭い画面ではラベルの列に 72px を割くと中身が折れて段がばらつく。ラベルを中身の上に置き、
+       左端を容器の端1本に揃える。移動は貼り付いて常に見える帯なので、高さを増やさないようラベルを畳む */
+    @media (max-width: 640px) {
+      .tree-bar { padding: 16px; gap: 16px; }
+      .find-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+      .find-row .status { grid-column: 1; }
+      .jump-bar { padding: 8px 16px; }
+      .jump-bar > .bar-label { display: none; }
+    }
 
     .font-status-btn { padding: 5px 10px; border-radius: 4px; font-weight: bold; border: 1px solid transparent; cursor: pointer; font-family: inherit; font-size: var(--fs-2); }
     /* ファイル選択は OS 任せの見た目になるので、input は隠してラベルをボタンとして出す */
@@ -361,8 +379,31 @@
     body.list-off #kanjiContainer { display: none; }
     body.list-off #kanjiPanes { justify-content: center; }
 
+    /* 狭い画面ではツリー（5列で 470px）を一覧の横に置けない。束と同じく下から出るシートにし、
+       開いているあいだは一覧をシートの上の残りの高さに縮める。カードをタップした字の行へ送って開く */
+    #treeClose { display: none; }
+    @media (max-width: 640px) {
+      body.tree-on:not(.list-off) #treePane, body.tree-on:not(.list-off) #treeClose { position: fixed; left: 0; right: 0; z-index: 35; transform: translateY(calc(50vh + 40px)); transition: transform 0.2s cubic-bezier(.2, 0, 0, 1); }
+      body.tree-on:not(.list-off) #treePane { bottom: 0; height: 50vh; border-width: 0; overscroll-behavior: contain; }
+      body.tree-on:not(.list-off) #treeClose { bottom: 50vh; height: 40px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border: none; border-top: 1px solid var(--line-strong); background: var(--surface); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12); color: var(--muted); font: inherit; font-size: var(--fs-2); cursor: pointer; }
+      body.tree-on:not(.list-off) #treeClose span:first-child { font-weight: bold; color: var(--heading); }
+      body.tree-on.tree-sheet:not(.list-off) #treePane, body.tree-on.tree-sheet:not(.list-off) #treeClose { transform: none; }
+      /* 一覧はページのまま流す（app.js の listScrolls）。貼り付けて中でスクロールさせると、
+         全幅の一覧がスワイプを全部受けて、上の枠や設定へ戻れなくなる */
+      body.tree-on:not(.list-off) #kanjiPanes { position: static; height: auto; }
+      body.tree-on:not(.list-off) #kanjiContainer { overflow: visible; }
+      /* シートのぶん下に余白を足す。足さないと一覧の最後の行がシートの裏から出てこない */
+      body.tree-on.tree-sheet:not(.list-off) #kanjiPanes { margin-bottom: calc(50vh + 40px); }
+    }
+    @media (prefers-reduced-motion: reduce) { #treePane, #treeClose { transition: none; } }
+    /* 長押しを右クリックとして使うので、iOS の長押しの吹き出しを出さない */
+    #kanjiContainer, #treePane { -webkit-touch-callout: none; }
     .tree-head { position: sticky; top: 0; z-index: 10; display: flex; background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-1); color: var(--muted); }
     .tree-head div { text-align: center; padding: 6px 0; }
+    /* 行の無い字へ送ったときの断り書き。見出しと一緒に貼り付け、横に送っても左端に残す */
+    .tree-head { flex-wrap: wrap; }
+    .tree-head .tree-note { position: sticky; left: 0; box-sizing: border-box; width: 100%; max-width: 100vw; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--main-soft); color: var(--fg); text-align: left; font-size: var(--fs-1); }
+    .tree-head .tree-note[hidden] { display: none; }
     .tree-head div.foc { color: var(--heading); background: var(--main-soft); font-weight: bold; }
     #treeBody { position: relative; }
     .tree-row { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line-faint); }

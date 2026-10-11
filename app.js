@@ -564,12 +564,22 @@
       // 左に開く束は右端を基準に置いているので、寄せるのも右側の余白で行う
       // （狭い画面の束は画面に貼り付くパネルなので寄せない）
       if (getComputedStyle(pal).position === 'absolute') {
+        // 開く動きの起点（閉じた位置の 8px のずれ）を外して、開ききった位置で測る。
+        // translate には動きを付けてあるので、動きも止めないと外した瞬間はまだ元の位置で測れてしまう
+        pal.style.transition = 'none';
+        pal.style.translate = 'none';
         const r = pal.getBoundingClientRect(), m = 8;
+        pal.style.translate = '';
+        void pal.offsetWidth;
+        pal.style.transition = '';
         const dx = Math.max(m - r.left, 0) - Math.max(r.right - (document.documentElement.clientWidth - m), 0);
         if (dx && pal.dataset.side === 'left') pal.style.marginRight = `${-dx}px`;
         else if (dx) pal.style.marginLeft = `${dx}px`;
       }
-      requestAnimationFrame(() => pal.classList.add('open'));
+      // 閉じた位置を一度確定させてから open を付け、開く動きを出す。requestAnimationFrame に任せると、
+      // 描画が止まっている間（裏に回ったタブなど）に付かず、束が画面の外に置かれたままになる
+      void pal.offsetWidth;
+      pal.classList.add('open');
       pal.querySelector('.pal-close').onclick = closePalette;
       const clr = pal.querySelector('.pal-clear');
       if (clr) clr.onclick = () => setSlot(pos, null);
@@ -584,8 +594,13 @@
       fillPalette();
       preview(pos);
       if (focus) find.focus({ preventScroll: true });
-      // 冠の束は枠の上に開くので、枠が画面の上の方にあると切れる。束が収まるところまで送る
-      pal.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      // 冠の束は枠の上に開くので、枠が画面の上の方にあると切れる。束が収まるところまで縦にだけ送る
+      // （scrollIntoView は横にも送り、旁の束で画面ごと右へ寄ってしまう）
+      if (getComputedStyle(pal).position === 'absolute') {
+        const r = pal.getBoundingClientRect(), top = navH() + 8, bottom = innerHeight - 8;
+        if (r.top < top) window.scrollBy(0, r.top - top);
+        else if (r.bottom > bottom) window.scrollBy(0, Math.min(r.bottom - bottom, r.top - top));
+      }
     }
     function closePalette() {
       if (!palettePos) return;
@@ -1626,6 +1641,7 @@
 
       let head = '<div class="tree-head" style="width:' + COL_W * 5 + 'px">';
       for (let c = 0; c < 5; c++) head += `<div id="colh${c}" style="width:${COL_W}px">${COL_LABEL[c]}</div>`;
+      head += '<div id="treeNote" class="tree-note" hidden></div>';
       pane.innerHTML = head + '</div><div id="treeBody" style="width:' + COL_W * 5 + 'px;height:' + y + 'px"></div>';
       focusCol = -1;
       renderTreeWindow();
@@ -1787,17 +1803,23 @@
     }
 
     /* 一覧の見えている範囲を容器内の座標で返す。一覧が独自のスクロール容器になるのは
-       ツリーONのときだけで（CSS: body.tree-on #kanjiContainer{overflow-y:auto}）、
-       OFFのときはページごと動く。paneTop と同じ基準なので cardY とそのまま比べられる。 */
+       広い画面でツリーONのときだけで（CSS: body.tree-on #kanjiContainer{overflow-y:auto}）、
+       それ以外はページごと動く。paneTop と同じ基準なので cardY とそのまま比べられる。
+       狭い画面ではツリーは下からのシートなので、一覧はページのまま流す。一覧を容器にすると、
+       全幅の一覧がスワイプを全部受けてしまい、一覧を先頭まで戻さないと上の枠や設定へ戻れない */
     const treeOn = () => document.body.classList.contains("tree-on");
+    const narrow = matchMedia('(max-width: 640px)');
+    const listScrolls = () => treeOn() && !(narrow.matches && showsList());
+    // シートが一覧の下半分を覆っている高さ（CSS の 50vh + 閉じる帯 40px）
+    const sheetH = () => narrow.matches && treeOn() && document.body.classList.contains("tree-sheet") ? innerHeight / 2 + 40 : 0;
     function listView() {
       const pane = el("kanjiContainer");
-      return treeOn() ? { pane, top: pane.scrollTop, h: pane.clientHeight }
-                      : { pane, top: -pane.getBoundingClientRect().top, h: innerHeight };
+      return listScrolls() ? { pane, top: pane.scrollTop, h: pane.clientHeight }
+                           : { pane, top: -pane.getBoundingClientRect().top, h: innerHeight };
     }
     function listScrollTo(y) {
       const v = listView();
-      if (treeOn()) { v.pane.scrollTop = y; lastListTop = v.pane.scrollTop; }
+      if (listScrolls()) { v.pane.scrollTop = y; lastListTop = v.pane.scrollTop; }
       else window.scrollTo(0, window.scrollY + y - v.top - navH()); // 上端に貼り付いた帯の下に出す
     }
 
@@ -1925,8 +1947,19 @@
         if (guard || driver === "list") { renderTreeWindow(); return; }
         guard = true; syncList(); requestAnimationFrame(() => guard = false);
       }, { passive: true });
-      // ツリーOFFのときは一覧ではなくページが動くので、窓はこちらで引き直す
-      window.addEventListener("scroll", () => { if (!treeOn()) renderCardWindow(); }, { passive: true });
+      // 一覧が容器でないときはページが動くので、窓はこちらで引き直す。狭い画面のシートのツリーも
+      // ここから合わせる。ツリーを触っているあいだ（driver が tree）は、ツリーが一覧を動かしている側なので返さない
+      window.addEventListener("scroll", () => {
+        if (listScrolls()) return;
+        renderCardWindow();
+        if (!treeOn() || guard || driver === "tree") return;
+        guard = true; syncTree(); requestAnimationFrame(() => guard = false);
+      }, { passive: true });
+      // ツリーの外を触ったら一覧（ページ）の側が駆動する。ページのスクロールは一覧の外からも始まる
+      ["pointerdown", "wheel"].forEach(n => window.addEventListener(n, e => {
+        if (!e.target.closest || !e.target.closest("#treePane")) driver = "list";
+        showTreeNote("");
+      }, { capture: true, passive: true }));
       // 幅が変われば列数が変わる。窓の伸縮のほか、ツリーの出入りやタブの切り替えでも
       // 一覧の幅は変わり、隠れているあいだは0で測れない。窓と容器の両方を見張る
       // （容器だけだと窓の伸縮を取りこぼす環境があり、窓だけだとペインの出入りを拾えない）。
@@ -1951,7 +1984,36 @@
       if (!c) return;
       copyText(c.dataset.char, `「${c.dataset.char}」`);
       showCharParts(c.dataset.char);
+      // 狭い画面ではツリーが横に無いので、タップした字の行へ送ってシートを開く
+      if (treeOn() && narrow.matches) jumpToChar(c.dataset.char);
     });
+    el("treeClose").addEventListener("click", () => document.body.classList.remove("tree-sheet"));
+
+    /* スマホには右クリックが無いので、長押しを右クリックとして扱う。Android は長押しで contextmenu を
+       出すが iOS は出さないので、自分で数えて同じイベントを送る。指が動けばスクロールとみなしてやめる。
+       送り先は押した要素ではなくその位置の要素にする。押しているあいだに窓が組み直されて外れることがある */
+    function longPressAsContext(root) {
+      let timer = 0, x = 0, y = 0, touch = false, fired = false;
+      const stop = () => clearTimeout(timer);
+      root.addEventListener("pointerdown", e => {
+        touch = e.pointerType !== "mouse"; fired = false;
+        if (!touch) return;
+        x = e.clientX; y = e.clientY;
+        stop();
+        timer = setTimeout(() => {
+          fired = true;
+          const t = document.elementFromPoint(x, y);
+          if (t && root.contains(t)) t.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+        }, 500);
+      });
+      root.addEventListener("pointermove", e => { if (Math.hypot(e.clientX - x, e.clientY - y) > 8) stop(); });
+      ["pointerup", "pointercancel"].forEach(n => root.addEventListener(n, stop));
+      root.addEventListener("contextmenu", e => { if (e.isTrusted && touch) { stop(); fired = true; } });
+      // 長押しを離したときのタップでコピーまで走らせない
+      root.addEventListener("click", e => { if (fired) { fired = false; e.stopPropagation(); e.preventDefault(); } }, true);
+    }
+    longPressAsContext(el("kanjiContainer"));
+    longPressAsContext(el("treePane"));
     el("kanjiContainer").addEventListener("mouseover", e => {
       const c = e.target.closest(".card");
       if (c) setHover(c.dataset.char);
@@ -1970,7 +2032,7 @@
       if (!ch) return;
       e.preventDefault();
       const base = Array.from(ch)[0];
-      const items = [{ label: 'この字へ移動（一覧と縮退ツリー）', run: () => {
+      const items = [{ label: treeOn() ? 'この字へ移動（一覧と縮退ツリー）' : 'この字へ移動', run: () => {
         if (!jumpToChar(ch)) el("mjmapStatus").textContent = `「${ch}」は一覧にありません`;
       } }, null];
       // 字そのもの（外字は IVS ごと）、符号位置、MJ 番号
@@ -2075,7 +2137,10 @@
         list.checked ? syncTree() : syncList();
       }
     }
-    ["showList", "showTree"].forEach(id => el(id).addEventListener("change", e => applyView(e.target)));
+    ["showList", "showTree"].forEach(id => el(id).addEventListener("change", e => {
+      if (e.target.id === "showTree") document.body.classList.toggle("tree-sheet", e.target.checked);
+      applyView(e.target);
+    }));
 
     el("fontBadge").addEventListener("click", () => {
       useIPAmj = !useIPAmj;
@@ -2089,6 +2154,29 @@
       const g = e.target.closest(".g");
       if (g) copyText(g.dataset.c, `「${g.dataset.c}」`);
     });
+
+    /* ツリーに行の無い字の断り書き。今は外している根拠でなら縮退があるときは、その根拠と行き先も添える。
+       ツリーを触るか一覧を動かせば消す（window の pointerdown / wheel） */
+    function noShrinkNote(ch, nearby) {
+      const base = Array.from(ch)[0], by = new Map();   // 根拠の名前 -> 行き先の字
+      // mjByChar は入れている根拠の縮退だけで組んであるので、ここは全MJから引く（7万件の走査で済む）
+      mjBase.forEach((b, mi) => b === base && mjmap.mj[mi][2].forEach(([ji, bits]) => {
+        SRC.forEach(x => {
+          if (x.on || !(bits >> x.b & 1) || jisCh[ji] === base) return;
+          const label = x.chip ? SRC.find(y => y.id === x.chip).label : x.label;
+          if (!by.has(label)) by.set(label, new Set());
+          by.get(label).add(jisCh[ji]);
+        });
+      }));
+      const hint = [...by].map(([l, t]) => `「${l}」を入れると ${[...t].join(" ")} へ`).join("、");
+      return `「${ch}」は、選んでいる根拠では縮退がありません。${hint ? hint + "縮退します。" : ""}${nearby ? "下は一覧で近くにある字の行です" : ""}`;
+    }
+    function showTreeNote(text) {
+      const n = el("treeNote");
+      if (!n) return;
+      n.textContent = text;
+      n.hidden = !text;
+    }
 
     /* 見えているものは動かさない。外に出ているときだけ、入りきる最小の量だけ送る。
        head は上端に貼り付く見出しのぶんで、その下からが実際に読める範囲になる。
@@ -2106,15 +2194,14 @@
     function jumpToChar(ch) {
       const i = listOrder.findIndex(it => it.char === ch);
       if (i < 0) return false;
-      // 一覧へ飛ぶ操作なので、ツリーだけ表示中でも一覧を出す
-      if (!showsList() || (!document.body.classList.contains("tree-on") && mjmap)) {
-        el("showList").checked = true;
-        if (mjmap) el("showTree").checked = true;
-        applyView();
-      }
+      // 一覧へ飛ぶ操作なので、ツリーだけ表示中でも一覧を出す。閉じているツリーは開かない。
+      // 勝手に開くと一覧とツリーが画面に貼り付く表示に変わり、スワイプが一覧の中で尽きて、
+      // 上の枠や設定へ戻れなくなる（狭い画面では一覧が全幅なので逃げ場が無い）
+      if (!showsList()) { el("showList").checked = true; applyView(); }
+      if (treeOn()) document.body.classList.add("tree-sheet");   // 狭い画面ではツリーがシートなので開く（広い画面では効かない）
       driver = "list";
       // 76px は sticky の水準見出しのぶん。下は行が半分で切れないよう少し余分に見る
-      const v = listView(), ly = minScroll(v.top, v.h, 76, cardY(i), pitch + 12);
+      const v = listView(), ly = minScroll(v.top, v.h - sheetH(), 76, cardY(i), pitch + 12);
       if (ly !== v.top) listScrollTo(ly);
       hoverChar = ch;
       curAnchor = -1;
@@ -2122,6 +2209,9 @@
       // 群を畳んだ字は、その字が実際に描かれている群の行へ送る
       let want = treeRows[firstRowOf[i]];
       if (!want || listOrder[want.anchor].char !== ch) want = treeRows[drawnAt.get(ch)] || want;
+      // 縮退の無い字はツリーに行を持たないので、送った先は近くの別の字の行になる。そう断っておく
+      const own = want && (listOrder[want.anchor].char === ch || drawnAt.get(ch) != null);
+      showTreeNote(own ? "" : noShrinkNote(ch, !!want));
       const tp = el("treePane");
       if (want) {
         // 行の y は tree-head のぶんを差し引いた座標なので、上端は head の下に出る。
@@ -2133,8 +2223,9 @@
       renderTreeWindow();
 
       // ペインは部首フィルタの下にあるので、画面に入っていなければページごと送る
+      // （一覧がページのまま流れているときは、上の listScrollTo がもうページを送っている）
       const box = el("kanjiPanes").getBoundingClientRect();
-      if (box.top > 40 || box.bottom < 120) {
+      if (listScrolls() && (box.top > 40 || box.bottom < 120)) {
         window.scrollTo({ top: window.scrollY + box.top - navH() - 8, behavior: "smooth" });
       }
 
@@ -2291,7 +2382,7 @@
         window.scrollBy(0, Math.min(dy, gap));
       }, { passive: false });
     }
-    scrollPageFirst(el('kanjiPanes'), () => navH() + 8, () => document.body.classList.contains('tree-on'));
+    scrollPageFirst(el('kanjiPanes'), () => navH() + 8, listScrolls);
     scrollPageFirst(el('hentaiganaContainer'), () => navH() + 8, () => true);
 
     // 共通ユーティリティ
