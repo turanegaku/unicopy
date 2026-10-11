@@ -108,6 +108,9 @@
     /* SVG の要素には HTML の [hidden] の既定が効かない */
     .pbox-shape[hidden] { display: none; }
     .pbox-glyphs span { position: absolute; transform: translate(-50%, -50%); font-family: "Noto Serif JP", serif; line-height: 1; color: var(--heading); pointer-events: none; }
+    /* 空の枠の案内。区画の名前を、その区画の場所に薄く置く（入力欄の placeholder と同じ役） */
+    .pbox-hint span { position: absolute; transform: translate(-50%, -50%); font-size: var(--fs-2); line-height: 1; color: var(--faint); pointer-events: none; }
+    .pbox-hint span.small { font-size: var(--fs-1); }
     /* キーボード用の区画ボタン。どこを指しているかは点線のプレビューが見せるので、ボタン自体は見せない */
     .pbox-keys button { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
     .pbox-frame:has(.pbox-keys button:focus-visible) { outline: 2px solid var(--main); outline-offset: 2px; }
@@ -240,6 +243,13 @@
     .hentai-meta { font-size: var(--fs-1); color: var(--sub); display: flex; flex-direction: column; gap: 2px; }
     .hentai-meta span { background: var(--line-faint); padding: 2px 5px; border-radius: 4px; }
 
+    /* カードの右クリックのメニュー。前に重なる面なので影を付ける */
+    .ctx-menu { position: fixed; z-index: 1001; min-width: 200px; padding: 4px 0; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: var(--fs-2); }
+    .ctx-title { padding: 4px 12px; font-size: var(--fs-1); color: var(--muted); }
+    .ctx-sep { height: 1px; margin: 4px 0; background: var(--line); }
+    .ctx-menu button { display: block; width: 100%; padding: 6px 12px; border: none; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+    .ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--main-soft); outline: none; }
+    .ctx-menu b { font-family: "Noto Serif JP", serif; font-weight: normal; }
     #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 4px; display: none; z-index: 1000; font-size: var(--fs-2); }
     .empty-msg { text-align: left; color: var(--faint); padding: 10px; font-size: var(--fs-2); grid-column: 1 / -1; }
 

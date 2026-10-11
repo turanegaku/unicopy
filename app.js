@@ -351,6 +351,7 @@
                 <path class="pbox-shape" id="pboxShape" d="" hidden></path>
               </svg>
               <div class="pbox-glyphs" id="pboxGlyphs" aria-hidden="true"></div>
+              <div class="pbox-hint" id="pboxHint" aria-hidden="true"></div>
               <div class="pbox-keys" id="pboxKeys" role="group" aria-label="部品の位置"></div>
             </div>
           </div>
@@ -402,6 +403,11 @@
         + (enclosure() ? `<path d="${innerPath()}"/>` : '');
       el('pboxFills').innerHTML = Object.keys(slots).filter(p => ZONE_SHAPE[p] || p === 'なかみ')
         .map(p => `<path d="${p === 'なかみ' ? innerPath() : ZONE_SHAPE[p]}"/>`).join('');
+      // 何も入れていないときは、入力欄の placeholder のように各区画の名前を薄く置く
+      el('pboxHint').innerHTML = Object.keys(slots).length ? '' : Object.keys(SLOT_GLYPH).map(p => {
+        const [x, y, size] = SLOT_GLYPH[p];
+        return `<span class="${size > 30 ? '' : 'small'}" style="left:${x}px;top:${y}px">${PART_LABELS[p]}</span>`;
+      }).join('');
       const o = innerOrigin(enclosure());
       el('pboxGlyphs').innerHTML = Object.keys(slots).filter(p => SLOT_GLYPH[p] || p === 'なかみ').map(p => {
         const [x, y, size] = p === 'なかみ' ? [o[0] + BOX.inner / 2, o[1] + BOX.inner / 2, 32] : SLOT_GLYPH[p];
@@ -679,8 +685,7 @@
       box.innerHTML = '';
       if (!ch) { box.hidden = true; return; }
       const base = Array.from(ch)[0];
-      const rad = Object.keys(DICT_RADICALS).find(r => DICT_RADICALS[r].includes(base))
-        || (mjmap && mjmap.dictRadicals ? Object.keys(mjmap.dictRadicals).find(r => mjmap.dictRadicals[r].includes(base)) : null);
+      const rad = dictRadicalOf(base);
       const parts = [...topParts(base, lookupIds), ...(rad ? [['ぶしゅ', rad]] : [])];
       box.hidden = false;
       box.appendChild(document.createTextNode(`「${base}」の構成: `));
@@ -1884,12 +1889,90 @@
     });
     el("treePane").addEventListener("mouseleave", () => setHover(null));
 
-    // 右クリックで一覧のその字へ移動する（両ペインとも）
+    // 右クリックでメニューを出す（両ペインとも）
+    /* 右クリックのメニュー。この字へ移動するか、この字を組み立てている部品・辞書の部首・IDS をコピーする。
+       部品は枠に入れるときと同じ「位置 部品」で並べ、コピーするのは部品の字だけ */
     function onContext(e, ch) {
       if (!ch) return;
       e.preventDefault();
-      if (!jumpToChar(ch)) el("mjmapStatus").textContent = `「${ch}」は一覧にありません`;
+      const base = Array.from(ch)[0];
+      const items = [{ label: 'この字へ移動（一覧と縮退ツリー）', run: () => {
+        if (!jumpToChar(ch)) el("mjmapStatus").textContent = `「${ch}」は一覧にありません`;
+      } }, null];
+      // 字そのもの（外字は IVS ごと）、符号位置、MJ 番号
+      const ucs = Array.from(ch).map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')).join(' ');
+      items.push({ label: `<b>${ch}</b> をコピー`, run: () => copyText(ch, `「${ch}」`) });
+      items.push({ label: `${ucs} をコピー`, run: () => copyText(ucs, ucs) });
+      const mj = mjNameOf(ch);
+      if (mj) items.push({ label: `${mj} をコピー`, run: () => copyText(mj, mj) });
+      const parts = topParts(base, lookupIds);
+      const rad = dictRadicalOf(base);
+      if (parts.length || rad) items.push(null);
+      const seen = new Set();
+      parts.forEach(([pos, part]) => {
+        if (seen.has(pos + part)) return;
+        seen.add(pos + part);
+        items.push({ label: `${SLOT_LABEL[pos]} <b>${part}</b> をコピー`, run: () => copyText(part, `「${part}」`) });
+      });
+      if (rad) {
+        const g = slotGlyph('ぶしゅ', rad);
+        items.push({ label: `辞書の部首 <b>${g}</b> をコピー`, run: () => copyText(g, `「${g}」`) });
+      }
+      openCtxMenu(e.clientX, e.clientY, `「${base}」`, items);
     }
+    /* 字の MJ 番号。外字の札（IVS 付き）はその字形の MJ、水準字はその面区点の例示字形（代表）の MJ。
+       mjmap を読んでいないときは出さない */
+    let mjOfGlyph = null, mjOfGlyphFor = null;   // 字形（IVS 込み）-> MJ index。mjmap を読み直したら組み直す
+    function mjNameOf(ch) {
+      if (!mjmap) return null;
+      if (mjOfGlyphFor !== mjmap) {
+        mjOfGlyph = new Map();
+        mjmap.mj.forEach((m, i) => { if (m[1] && !mjOfGlyph.has(m[1])) mjOfGlyph.set(m[1], i); });
+        mjOfGlyphFor = mjmap;
+      }
+      const base = Array.from(ch)[0];
+      const i = Array.from(ch).length > 1 ? mjOfGlyph.get(ch)
+        : (mjByChar.get(base) || []).find(i => mjBase[i] === base && repOf.has(i)) ?? mjOfGlyph.get(ch);
+      return i == null ? null : mjName(mjmap.mj[i][0]);
+    }
+    const dictRadicalOf = base => Object.keys(DICT_RADICALS).find(r => DICT_RADICALS[r].includes(base))
+      || (mjmap && mjmap.dictRadicals ? Object.keys(mjmap.dictRadicals).find(r => mjmap.dictRadicals[r].includes(base)) : null);
+
+    // メニューはカーソルの位置に出し、画面からはみ出すなら内側へ寄せる。Esc・外側のクリック・スクロールで閉じる
+    function openCtxMenu(x, y, title, items) {
+      closeCtxMenu();
+      const m = document.createElement('div');
+      m.className = 'ctx-menu';
+      m.id = 'ctxMenu';
+      m.setAttribute('role', 'menu');
+      m.innerHTML = `<div class="ctx-title">${title}</div>`;
+      items.forEach(it => {
+        if (!it) { m.appendChild(Object.assign(document.createElement('div'), { className: 'ctx-sep' })); return; }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('role', 'menuitem');
+        b.innerHTML = it.label;
+        b.onclick = () => { closeCtxMenu(); it.run(); };
+        m.appendChild(b);
+      });
+      document.body.appendChild(m);
+      const r = m.getBoundingClientRect(), W = document.documentElement.clientWidth, H = innerHeight;
+      m.style.left = `${Math.max(8, Math.min(x, W - r.width - 8))}px`;
+      m.style.top = `${Math.max(8, Math.min(y, H - r.height - 8))}px`;
+      m.querySelector('button').focus({ preventScroll: true });
+    }
+    function closeCtxMenu() { const m = el('ctxMenu'); if (m) m.remove(); }
+    document.addEventListener('pointerdown', e => { if (!e.target.closest('#ctxMenu')) closeCtxMenu(); });
+    window.addEventListener('scroll', closeCtxMenu, true);
+    document.addEventListener('keydown', e => {
+      const m = el('ctxMenu');
+      if (!m) return;
+      if (e.key === 'Escape') { closeCtxMenu(); return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const bs = [...m.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+      bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
+    });
     el("kanjiContainer").addEventListener("contextmenu", e => {
       const c = e.target.closest(".card");
       onContext(e, c && c.dataset.char);
