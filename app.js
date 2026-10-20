@@ -845,14 +845,18 @@
       document.addEventListener('keydown', e => { if (e.key === 'Escape' && palettePos) { closePalette(); e.preventDefault(); } });
     }
 
+    /* 字の検索と部品は別の探し方で、重ねると 0 件になりやすく、いまどちらで引いているかも分からなくなる。
+       部品を入れたら検索欄を空け、検索欄に打ったら部品を外す */
+    const clearQuery = () => { el('mjSearch').value = ''; el('mjmapStatus').textContent = ''; };
     function setSlot(pos, part) {
-      if (part == null) delete slots[pos]; else slots[pos] = part;
+      if (part == null) delete slots[pos]; else { slots[pos] = part; clearQuery(); }
       if (!enclosure()) delete slots['なかみ'];   // 囲いを外したら中身の区画ごと消える
       closePalette();
       pushNext = true;
       renderKanji();
     }
     function setNestSteps(steps) {
+      if (steps.length > nestSteps.length) clearQuery();
       nestSteps = steps;
       closePalette();
       pushNext = true;
@@ -2694,7 +2698,17 @@
     let searchTimer = 0;
     const scheduleSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 250); };
     ["input", "compositionend"].forEach(ev =>
-      el("mjSearch").addEventListener(ev, e => { if (!e.isComposing) scheduleSearch(); }));
+      el("mjSearch").addEventListener(ev, e => {
+        if (e.isComposing) return;
+        // 検索で引くときは部品を外す（setSlot の上の説明）。部品は消えるので、戻せるよう履歴を積む
+        if (el("mjSearch").value.trim() && (Object.keys(slots).length || nestSteps.length)) {
+          slots = {};
+          nestSteps = [];
+          closePalette();
+          pushNext = true;
+        }
+        scheduleSearch();
+      }));
     ["onlyJinmei", "onlyShrink"].forEach(id => el(id).addEventListener("change", () => { pushNext = true; runSearch(); }));
     // / で検索欄へ（入力中の欄では普通に / を打てる）
     document.addEventListener("keydown", e => {
