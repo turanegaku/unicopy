@@ -334,7 +334,7 @@
        決め打ちの割合だと、広い字が狭い側に押し込まれて小さく、細い字が広い側で大きく描かれる。
        縦横比（幅 / 高さ）は、部品は墨の範囲、穴と囲いは正方形、⿰ は高さを揃えて幅を足し、⿱ は幅を揃えて高さを足す */
     function natAspect(n) {
-      if (n === null || NEST_ENCL.includes(n.op)) return 1;
+      if (isHole(n) || NEST_ENCL.includes(n.op)) return 1;
       if (typeof n === 'string') {
         const [L, R, A, D] = inkBox(n);
         return L + R > 0 && A + D > 0 ? Math.min(Math.max((L + R) / (A + D), .25), 4) : 1;
@@ -358,7 +358,7 @@
       if (!t || !NEST_ROLE[t.op]) return out;
       const holes = nestHoles(t);
       t.args.forEach((a, i) => {
-        if (a === null) out[NEST_ROLE[t.op][i]] = 'あな' + holes.findIndex(h => h.path.join() === String(i));
+        if (isHole(a)) out[NEST_ROLE[t.op][i]] = 'あな' + holes.findIndex(h => h.path.join() === String(i));
       });
       return out;
     }
@@ -695,7 +695,7 @@
       };
       const part = (ch, r, path) => { if (owner.has(path.join())) hitRects.push({ r, z: 'だん' + owner.get(path.join()), d: inset(r, 1) }); };
       (function walk(n, r, path) {
-        if (n === null) { hole(r); return; }
+        if (isHole(n)) { hole(r); return; }
         if (typeof n === 'string') {
           part(n, r, path);
           fills.push(`<path d="${rectPath(inset(r, 1))}"/>`);
@@ -705,7 +705,7 @@
         const [a, b] = nestSplit(n).map(f => sub(r, f));
         if (NEST_ENCL.includes(n.op)) {
           let inner = b;
-          if (n.args[0] === null) hole(a);
+          if (isHole(n.args[0])) hole(a);
           else {
             const g = glyphFit(n.args[0], inset(a, 3)), e = emptyInside(n.args[0], n.op), k = g.ink;
             part(n.args[0], a, [...path, 0]);

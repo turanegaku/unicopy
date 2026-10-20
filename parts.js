@@ -10744,21 +10744,25 @@
        段は 2 種類。位置（偏・冠…）を選ぶと、いまの形を反対側に入れて外を包む。偏→冠 は ⿱冠(⿰偏□)、
        冠→偏 は ⿰偏(⿱冠□) になる。['あな', 部品, 経路] は、その時点の形の中で経路（引数の番号の列）の先の穴を埋める。
        経路はその時点の形の根から数えるので、後から外を包んでも、前の段の部品を穴に戻しても変わらない。
-       位置の段の部品が null なら、その所は穴のまま形だけを持つ（途中の段を外したとき）。
+       位置の段の部品が null なら、その所は「外した所」（ELIDED）として形だけを持つ（途中の段を外したとき）。
        構は ⿴ で持ち、照合では囲いの演算子すべてに当てる。 */
     const NEST_OP = { 'へん': ['⿰', 0], 'つくり': ['⿰', 1], 'かんむり': ['⿱', 0], 'あし': ['⿱', 1],
                       'たれ': ['⿸', 0], 'にょう': ['⿺', 0], 'かまえ': ['⿴', 0] };
     const NEST_ENCL = '⿴⿸⿺';
+    /* 部品を外した所。まだ選んでいない穴（null）は「何かが入る」だが、外した所は「何かが入る」でも「その段ごと無い」でもよい。
+       ⿰(⿰糸X)戠 から X を外すと、⿰(⿰糸□)戠 だけでなく ⿰糸戠（織）にも当てたい。埋め直せる点は穴と同じ */
+    const ELIDED = { elided: true };
+    const isHole = x => x === null || x === ELIDED;
     function nestAdd(t, pos, part) {
       const [op, i] = NEST_OP[pos];
       const args = [null, null];
-      args[i] = part;
+      args[i] = part === null ? ELIDED : part;
       args[1 - i] = t;
       return { op, args };
     }
     // 経路の先が穴なら埋める。穴でなければ（経路が古い）形をそのまま返す
     function nestFill(t, path, part) {
-      if (!path.length) return t === null ? part : t;
+      if (!path.length) return isHole(t) ? part : t;
       if (!t || typeof t === 'string' || !t.op) return t;
       const [i, ...rest] = path;
       return { op: t.op, args: t.args.map((a, j) => j === i ? nestFill(a, rest, part) : a) };
@@ -10770,7 +10774,7 @@
     function nestHoles(t) {
       const out = [];
       (function walk(x, path, role) {
-        if (x === null) { out.push({ path, role }); return; }
+        if (isHole(x)) { out.push({ path, role }); return; }
         if (typeof x === 'string' || !x.op) return;
         x.args.forEach((a, i) => walk(a, [...path, i], NEST_ENCL.includes(x.op) ? (i ? 'なかみ' : x.op === '⿴' ? 'かまえ' : x.op === '⿸' ? 'たれ' : 'にょう') : NEST_ROLE[x.op][i]));
       })(t, [], null);
@@ -10778,6 +10782,7 @@
     }
     function nestText(t) {
       if (t === null) return '□';
+      if (t === ELIDED) return '◇';
       if (typeof t === 'string') return t;
       if (!t.op) return '＊';
       return t.op + t.args.map(nestText).join('');
@@ -10851,6 +10856,14 @@
       const seen = new WeakMap();
       function within(n, p, d, cap) {
         if (d > 12) return false;
+        // 外した所のある段は、その所を穴にした形と、段ごと無くして残りの側だけの形の、どちらかに当たればよい
+        const e = p && p.op ? p.args.indexOf(ELIDED) : -1;
+        if (e >= 0) {
+          const rest = p.args[1 - e];
+          const open = within(n, { op: p.op, args: p.args.map(a => a === ELIDED ? null : a) }, d, cap);
+          const gone = !isHole(rest) && rest !== CAPTURE && within(n, rest, d, cap);
+          return open || gone;
+        }
         if (typeof n === 'string') {
           if (typeof p === 'string' && forms(p).includes(n)) return true;
           const t = treeOf(n);
@@ -10904,4 +10917,4 @@
 
     // ブラウザでは素の script として読み、node では確認用のスクリプトから require する
     if (typeof module === 'object') module.exports = { PART_IDS, DICT_RADICALS, idsArgs, makeParts, topParts, buildPartIndex, BOX, innerOrigin, boxZone,
-                                                  nestAdd, nestStep, nestTree, nestHoles, nestText, makeNest, CAPTURE };
+                                                  nestAdd, nestStep, nestTree, nestHoles, nestText, makeNest, CAPTURE, ELIDED, isHole };
