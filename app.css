@@ -119,6 +119,7 @@
     .pbox-shape[hidden] { display: none; }
     /* 入れ子の穴（何でもよい所）。塗らずに点線で囲む */
     .pbox-fills path.hole { fill: none; stroke: var(--main); stroke-width: 1; stroke-dasharray: 3 3; }
+    .pbox-fills path.hole.off { stroke: none; }
     .pbox-fills path.ring { fill: none; stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
     .pbox-glyphs span { position: absolute; transform: translate(-50%, -50%); font-family: "Noto Serif JP", serif; line-height: 1; color: var(--heading); pointer-events: none; }
     /* 空の枠の案内。各区画に入る部品の見本を薄く置き、区画の線も出す（入力欄の placeholder と同じ役） */
