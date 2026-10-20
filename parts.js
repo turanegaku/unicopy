@@ -10739,6 +10739,130 @@
       return idx;
     }
 
+    /* ---- 入れ子で組む ----
+       枠で選んだ順に、内側から外へ IDS の形を組む。形は { op, args } の木で、部品は字、穴（何でもよい所）は null。
+       段は 2 種類。位置（偏・冠…）を選ぶと、いまの形を反対側に入れて外を包む。偏→冠 は ⿱冠(⿰偏□)、
+       冠→偏 は ⿰偏(⿱冠□) になる。['あな', 部品, k] は、形の中の k 番目（行きがけ順）の穴を埋める。
+       構は ⿴ で持ち、照合では囲いの演算子すべてに当てる。 */
+    const NEST_OP = { 'へん': ['⿰', 0], 'つくり': ['⿰', 1], 'かんむり': ['⿱', 0], 'あし': ['⿱', 1],
+                      'たれ': ['⿸', 0], 'にょう': ['⿺', 0], 'かまえ': ['⿴', 0] };
+    const NEST_ENCL = '⿴⿸⿺';
+    function nestAdd(t, pos, part) {
+      const [op, i] = NEST_OP[pos];
+      const args = [null, null];
+      args[i] = part;
+      args[1 - i] = t;
+      return { op, args };
+    }
+    function nestFill(t, k, part) {
+      let n = 0;
+      return (function walk(x) {
+        if (x === null) return n++ === k ? part : null;
+        if (typeof x === 'string') return x;
+        return { op: x.op, args: x.args.map(walk) };
+      })(t);
+    }
+    const nestStep = (t, [pos, part, k]) => pos === 'あな' ? nestFill(t, k, part) : nestAdd(t, pos, part);
+    const nestTree = steps => steps.reduce(nestStep, null);
+    // 穴ごとの位置の呼び名（行きがけ順）。束の顔ぶれと条件の名前に使う
+    const NEST_ROLE = { '⿰': ['へん', 'つくり'], '⿱': ['かんむり', 'あし'] };
+    function nestHoleRoles(t) {
+      const out = [];
+      (function walk(x, role) {
+        if (x === null) { out.push(role); return; }
+        if (typeof x === 'string') return;
+        x.args.forEach((a, i) => walk(a, NEST_ENCL.includes(x.op) ? 'なかみ' : NEST_ROLE[x.op][i]));
+      })(t, null);
+      return out;
+    }
+    function nestText(t) {
+      if (t === null) return '□';
+      if (typeof t === 'string') return t;
+      if (!t.op) return '＊';
+      return t.op + t.args.map(nestText).join('');
+    }
+
+    // IDS の文字列を木にする。壊れた記述は照合に当たらない印（?）にする
+    function parseIds(s) {
+      const a = idsArgs(s);
+      if (!a) return Array.from(s).length === 1 ? s : '?';
+      return { op: a[0], args: a[1].map(parseIds) };
+    }
+
+    /* 組んだ形と字の IDS を照合する。各段の配置は一致を求め、字の部品がまとまった字（椅 の 奇）は
+       その IDS（⿱大可）に開いて比べる。⿲⿳ は ⿰⿰ / ⿱⿱ のどちらの割り方でも当てる。
+       forms(部品) は同一視する字体（人 に 亻）。CAPTURE を形に置くと、そこに来た部品を集める（束の件数用）。 */
+    const CAPTURE = { capture: true };
+    function makeNest(lookup, forms = p => [p]) {
+      const memo = new Map();
+      function treeOf(c) {
+        if (!memo.has(c)) {
+          const s = lookup(c);
+          const t = s && s !== c ? parseIds(s) : null;
+          memo.set(c, t && typeof t !== 'string' ? t : null);
+        }
+        return memo.get(c);
+      }
+      function splits(n, op) {
+        const pair = (o, a, b) => ({ op: o, args: [a, b] });
+        if (op === '⿰' || op === '⿱') {
+          if (n.op === op) return [n.args];
+          const tri = op === '⿰' ? '⿲' : '⿳';
+          if (n.op !== tri) return [];
+          const [a, b, c] = n.args;
+          return [[a, pair(op, b, c)], [pair(op, a, b), c]];
+        }
+        if (op === '⿴') return '⿴⿵⿶⿷⿹'.includes(n.op) || (n.op === '⿻' && n.args[0] === '冂') ? [n.args] : [];
+        return n.op === op ? [n.args] : [];
+      }
+      function match(n, p, d, cap) {
+        if (p === null) return true;
+        if (p === CAPTURE) { cap.push(n); return true; }
+        if (d > 12) return false;
+        if (typeof p === 'string') {
+          if (typeof n === 'string') return forms(p).includes(n);
+          const t = treeOf(p);
+          return !!t && match(n, t, d + 1, []);
+        }
+        if (typeof n === 'string') {
+          const t = treeOf(n);
+          return !!t && match(t, p, d + 1, cap);
+        }
+        let ok = false;
+        for (const args of splits(n, p.op)) {
+          const c = [];
+          if (args.every((x, i) => match(x, p.args[i], d + 1, c))) { ok = true; cap.push(...c); }
+        }
+        return ok;
+      }
+      /* 組んだ形は外側がまだ決まっていないので、字の全体でなくても、部品のどこかにその形があれば当てる。
+         淄（⿰氵甾）は 甾（⿱巛田）を含むので ⿱巛田 に当たる。字ごとの結果は形ごとに覚える */
+      const seen = new WeakMap();
+      function within(n, p, d, cap) {
+        if (d > 12) return false;
+        if (typeof n === 'string') {
+          const t = treeOf(n);
+          return !!t && within(t, p, d + 1, cap);
+        }
+        let ok = match(n, p, d, cap);
+        for (const a of n.args) if (within(a, p, d + 1, cap)) ok = true;
+        return ok;
+      }
+      return {
+        test(ch, t) {
+          let m = seen.get(t);
+          if (!m) seen.set(t, m = new Map());
+          if (!m.has(ch)) m.set(ch, within(ch, t, 0, []));
+          return m.get(ch);
+        },
+        // 当たったときは、CAPTURE の所に来た部品（字のものだけ）の配列。外れたら null
+        capture(ch, t) {
+          const cap = [];
+          return within(ch, t, 0, cap) ? cap.filter(x => typeof x === 'string') : null;
+        },
+      };
+    }
+
     /* ---- 枠の当たり判定 ----
        寸法は比較ページで利用者が触って決めた値。枠の左上を原点にした px で、
        構は枠のすぐ外（halo）でも指せるので、枠の外の座標もそのまま受ける。 */
@@ -10767,4 +10891,5 @@
     }
 
     // ブラウザでは素の script として読み、node では確認用のスクリプトから require する
-    if (typeof module === 'object') module.exports = { PART_IDS, DICT_RADICALS, idsArgs, makeParts, topParts, buildPartIndex, BOX, innerOrigin, boxZone };
+    if (typeof module === 'object') module.exports = { PART_IDS, DICT_RADICALS, idsArgs, makeParts, topParts, buildPartIndex, BOX, innerOrigin, boxZone,
+                                                  nestAdd, nestStep, nestTree, nestHoleRoles, nestText, makeNest, CAPTURE };

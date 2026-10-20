@@ -4,7 +4,8 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { PART_IDS, DICT_RADICALS, makeParts, topParts, buildPartIndex, boxZone } = require('../parts.js');
+const { PART_IDS, DICT_RADICALS, makeParts, topParts, buildPartIndex, boxZone,
+        nestTree, nestHoleRoles, nestText, makeNest, CAPTURE } = require('../parts.js');
 
 const partsOf = makeParts(c => PART_IDS[c]);
 const has = (ch, pos, ...ps) => ps.forEach(p => assert(partsOf(ch)?.[pos]?.has(p), `${ch} の ${pos} に ${p} が無い`));
@@ -42,6 +43,33 @@ assert.strictEqual(boxZone(88, 88, 'かまえ'), 'なかみ');       // 囲い�
 assert.strictEqual(boxZone(130, 130, 'たれ'), 'なかみ');
 assert.strictEqual(boxZone(130, 40, 'にょう'), 'なかみ');
 assert.strictEqual(boxZone(87, 88), 'へん');                    // 中央線ちょうどは右半分（旁）
+
+// 入れ子で組む。位置を選ぶと外を包み、あな は形の中の空いた所を埋める。偏と冠のどちらを先に選んだかで形が変わる
+const nt = (...steps) => nestText(nestTree(steps));
+assert.strictEqual(nt(['かんむり', '大'], ['あな', '可', 0], ['へん', '木']), '⿰木⿱大可');
+assert.strictEqual(nt(['へん', '木'], ['かんむり', '艹']), '⿱艹⿰木□');
+assert.strictEqual(nt(['かんむり', '艹'], ['へん', '木']), '⿰木⿱艹□');
+assert.strictEqual(nt(['へん', '亻'], ['へん', '木']), '⿰木⿰亻□');
+assert.strictEqual(nt(['かまえ', '門'], ['あな', '日', 0]), '⿴門日');
+assert.strictEqual(nt(['へん', '木'], ['かんむり', '艹'], ['あな', '口', 0]), '⿱艹⿰木口');
+assert.deepStrictEqual(nestHoleRoles(nestTree([['へん', '木'], ['かんむり', '艹']])), ['つくり']);
+assert.deepStrictEqual(nestHoleRoles(nestTree([['にょう', '辶']])), ['なかみ']);
+
+const nest = makeNest(c => PART_IDS[c], p => p === '人' ? ['人', '亻'] : [p]);
+const hits = (ch, ...steps) => assert(nest.test(ch, nestTree(steps)), `${ch} が ${nt(...steps)} に当たらない`);
+const miss = (ch, ...steps) => assert(!nest.test(ch, nestTree(steps)), `${ch} が ${nt(...steps)} に当たる`);
+hits('椅', ['かんむり', '大'], ['へん', '木']);                    // 奇 を ⿱大可 に開いて当てる
+hits('椅', ['かんむり', '大'], ['あな', '可', 0], ['へん', '木']);
+miss('椅', ['へん', '木'], ['かんむり', '大']);                     // 順が逆なら ⿱大⿰木□ で当たらない
+hits('淄', ['かんむり', '巛'], ['あな', '田', 0]);                  // 外がまだ決まっていない形は、部品のどこかにあれば当てる
+hits('淄', ['かんむり', '巛'], ['あな', '田', 0], ['へん', '氵']);
+miss('淄', ['かんむり', '巛'], ['あな', '田', 0], ['つくり', '氵']);
+hits('森', ['へん', '木']); miss('森', ['あし', '木']);              // 森 = ⿱木林 は 林 の中に ⿰木□
+hits('倣', ['へん', '人']);                                          // 字体の同一視
+hits('街', ['へん', '彳']); hits('街', ['つくり', '亍']);            // ⿲ はどちらの割り方でも
+hits('国', ['かまえ', '囗'], ['あな', '玉', 0]);
+hits('道', ['にょう', '辶']); miss('道', ['たれ', '辶']);
+assert.deepStrictEqual(nest.capture('椅', { op: '⿰', args: ['木', CAPTURE] }), ['奇']);
 
 const mm = path.join(__dirname, '..', 'mjmap.json');
 if (fs.existsSync(mm)) {
