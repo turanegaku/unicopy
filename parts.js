@@ -10742,7 +10742,9 @@
     /* ---- 入れ子で組む ----
        枠で選んだ順に、内側から外へ IDS の形を組む。形は { op, args } の木で、部品は字、穴（何でもよい所）は null。
        段は 2 種類。位置（偏・冠…）を選ぶと、いまの形を反対側に入れて外を包む。偏→冠 は ⿱冠(⿰偏□)、
-       冠→偏 は ⿰偏(⿱冠□) になる。['あな', 部品, k] は、形の中の k 番目（行きがけ順）の穴を埋める。
+       冠→偏 は ⿰偏(⿱冠□) になる。['あな', 部品, 経路] は、その時点の形の中で経路（引数の番号の列）の先の穴を埋める。
+       経路はその時点の形の根から数えるので、後から外を包んでも、前の段の部品を穴に戻しても変わらない。
+       位置の段の部品が null なら、その所は穴のまま形だけを持つ（途中の段を外したとき）。
        構は ⿴ で持ち、照合では囲いの演算子すべてに当てる。 */
     const NEST_OP = { 'へん': ['⿰', 0], 'つくり': ['⿰', 1], 'かんむり': ['⿱', 0], 'あし': ['⿱', 1],
                       'たれ': ['⿸', 0], 'にょう': ['⿺', 0], 'かまえ': ['⿴', 0] };
@@ -10754,25 +10756,24 @@
       args[1 - i] = t;
       return { op, args };
     }
-    function nestFill(t, k, part) {
-      let n = 0;
-      return (function walk(x) {
-        if (x === null) return n++ === k ? part : null;
-        if (typeof x === 'string') return x;
-        return { op: x.op, args: x.args.map(walk) };
-      })(t);
+    // 経路の先が穴なら埋める。穴でなければ（経路が古い）形をそのまま返す
+    function nestFill(t, path, part) {
+      if (!path.length) return t === null ? part : t;
+      if (!t || typeof t === 'string' || !t.op) return t;
+      const [i, ...rest] = path;
+      return { op: t.op, args: t.args.map((a, j) => j === i ? nestFill(a, rest, part) : a) };
     }
-    const nestStep = (t, [pos, part, k]) => pos === 'あな' ? nestFill(t, k, part) : nestAdd(t, pos, part);
+    const nestStep = (t, [pos, part, path]) => pos === 'あな' ? nestFill(t, path, part) : nestAdd(t, pos, part);
     const nestTree = steps => steps.reduce(nestStep, null);
-    // 穴ごとの位置の呼び名（行きがけ順）。束の顔ぶれと条件の名前に使う
+    // 形の中の穴を行きがけ順に、経路と位置の呼び名（束の顔ぶれと条件の名前に使う）で返す
     const NEST_ROLE = { '⿰': ['へん', 'つくり'], '⿱': ['かんむり', 'あし'] };
-    function nestHoleRoles(t) {
+    function nestHoles(t) {
       const out = [];
-      (function walk(x, role) {
-        if (x === null) { out.push(role); return; }
-        if (typeof x === 'string') return;
-        x.args.forEach((a, i) => walk(a, NEST_ENCL.includes(x.op) ? 'なかみ' : NEST_ROLE[x.op][i]));
-      })(t, null);
+      (function walk(x, path, role) {
+        if (x === null) { out.push({ path, role }); return; }
+        if (typeof x === 'string' || !x.op) return;
+        x.args.forEach((a, i) => walk(a, [...path, i], NEST_ENCL.includes(x.op) ? (i ? 'なかみ' : x.op === '⿴' ? 'かまえ' : x.op === '⿸' ? 'たれ' : 'にょう') : NEST_ROLE[x.op][i]));
+      })(t, [], null);
       return out;
     }
     function nestText(t) {
@@ -10817,7 +10818,7 @@
       }
       function match(n, p, d, cap) {
         if (p === null) return true;
-        if (p === CAPTURE) { cap.push(n); return true; }
+        if (p === CAPTURE) { partsIn(n, cap, 0); return true; }
         if (d > 12) return false;
         if (typeof p === 'string') {
           if (typeof n === 'string') return forms(p).includes(n);
@@ -10828,12 +10829,22 @@
           const t = treeOf(n);
           return !!t && match(t, p, d + 1, cap);
         }
+        // 各側は、その側の部品のどこかにあればよい。熒（⿱𤇾火、𤇾=⿱炏冖）は上側が 炏 そのものではないが、
+        // 炏（⿰火火）を含むので ⿱(⿰火火)火 に当てる。部品 1 字も同じで、倣（⿰亻放）は 放 に 攵 を含むので ⿰亻攵 に当てる
+        const side = q => q === null || q === CAPTURE ? match : within;
         let ok = false;
         for (const args of splits(n, p.op)) {
           const c = [];
-          if (args.every((x, i) => match(x, p.args[i], d + 1, c))) { ok = true; cap.push(...c); }
+          if (args.every((x, i) => side(p.args[i])(x, p.args[i], d + 1, c))) { ok = true; cap.push(...c); }
         }
         return ok;
+      }
+      // CAPTURE の所に来た部品と、それを組み立てている部品のすべて（側の中のどれを選んでも当たるので、束の件数もそう数える）
+      function partsIn(n, out, d) {
+        if (d > 12) return;
+        out.push(n);
+        const t = typeof n === 'string' ? treeOf(n) : n;
+        if (t && t.op) t.args.forEach(a => partsIn(a, out, d + 1));
       }
       /* 組んだ形は外側がまだ決まっていないので、字の全体でなくても、部品のどこかにその形があれば当てる。
          淄（⿰氵甾）は 甾（⿱巛田）を含むので ⿱巛田 に当たる。字ごとの結果は形ごとに覚える */
@@ -10841,6 +10852,7 @@
       function within(n, p, d, cap) {
         if (d > 12) return false;
         if (typeof n === 'string') {
+          if (typeof p === 'string' && forms(p).includes(n)) return true;
           const t = treeOf(n);
           return !!t && within(t, p, d + 1, cap);
         }
@@ -10892,4 +10904,4 @@
 
     // ブラウザでは素の script として読み、node では確認用のスクリプトから require する
     if (typeof module === 'object') module.exports = { PART_IDS, DICT_RADICALS, idsArgs, makeParts, topParts, buildPartIndex, BOX, innerOrigin, boxZone,
-                                                  nestAdd, nestStep, nestTree, nestHoleRoles, nestText, makeNest, CAPTURE };
+                                                  nestAdd, nestStep, nestTree, nestHoles, nestText, makeNest, CAPTURE };

@@ -218,7 +218,7 @@
        位置の決め方と当たり判定は parts.js。入れた条件どうしは AND で重なる（人名用漢字や検索と同じ畳み方）。
        位置で分けられない字（⿻）と国語辞典式の部首は位置ではないので、枠の外のボタンから足す。 */
     const SLOT_LABEL = { ...PART_LABELS, 'なかみ': '中身', 'なし': '位置なし', 'ぶしゅ': '辞書の部首' };
-    const slotTitle = pos => holeK(pos) >= 0 ? `空いた所（${SLOT_LABEL[nestHoleRoles(nestNow())[holeK(pos)]] || '中'}）`
+    const slotTitle = pos => holeK(pos) >= 0 ? `空いた所（${SLOT_LABEL[(nestHoles(nestNow())[holeK(pos)] || {}).role] || '中'}）`
       : PART_LABELS[pos] ? `${PART_LABELS[pos]}（${pos}）` : SLOT_LABEL[pos];
     // 束を開く向き。指した場所のすぐ横に出す。中身は囲いの束と重ならないよう反対側
     const PALETTE_SIDE = { 'へん': 'left', 'つくり': 'right', 'かんむり': 'top', 'あし': 'bottom',
@@ -269,12 +269,21 @@
     const isNestPos = pos => nestMode && !NEST_FREE.includes(pos);
     const holeK = pos => /^あな\d+$/.test(pos || '') ? +pos.slice(2) : -1;
     // 束の位置から段を作る。穴は行きがけ順の番号で持つ
-    const nestStepOf = (pos, part) => holeK(pos) >= 0 ? ['あな', part, holeK(pos)] : [pos, part];
+    const nestStepOf = (pos, part) => holeK(pos) >= 0 ? ['あな', part, nestHoles(nestNow())[holeK(pos)].path] : [pos, part];
     // 段の呼び名。穴を埋めた段は、その穴が字のどの位置か（偏・中身…）で呼ぶ
     function stepLabel(i) {
-      const [pos, , k] = nestSteps[i];
+      const [pos, , path] = nestSteps[i];
       if (pos !== 'あな') return SLOT_LABEL[pos];
-      return SLOT_LABEL[nestHoleRoles(nestTree(nestSteps.slice(0, i)))[k]] || '穴';
+      const h = nestHoles(nestTree(nestSteps.slice(0, i))).find(h => h.path.join() === path.join());
+      return SLOT_LABEL[h && h.role] || '穴';
+    }
+    /* 段を外す。途中の位置の段は、部品だけを穴に戻して形は残す（後の段の位置と、穴埋めの経路を変えないため）。
+       穴埋めの段と最後の段はそのまま抜く。抜いたあと外側に残った部品の無い段は、形の意味が無いので落とす */
+    function dropStep(steps, i) {
+      const out = i === steps.length - 1 || steps[i][0] === 'あな'
+        ? steps.filter((_, j) => j !== i) : steps.map((st, j) => j === i ? [st[0], null] : st);
+      while (out.length && out[out.length - 1][0] !== 'あな' && out[out.length - 1][1] == null) out.pop();
+      return out.some(st => st[1] != null) ? out : [];
     }
     // 条件として効いている slots。入れ子のときは なし・辞書の部首だけ（ラフで入れた部品は残すが効かせない）
     const liveSlots = () => nestMode ? Object.fromEntries(Object.entries(slots).filter(([p]) => NEST_FREE.includes(p))) : slots;
@@ -301,12 +310,13 @@
     /* 枠の環。形を真ん中の四角に描き、その周りの帯で外を包む位置を指す。帯の割り振りは空の枠と同じ向き
        （上=冠、下=脚、左=偏、右=旁、左上の角=垂、左下の角=繞、右の角と枠の外=構） */
     const RING = 40;
-    let nestHoles = [];   // 描いた穴の範囲（行きがけ順）。当たり判定とキーボードの区画に使う
+    let holeRects = [];   // 描いた穴の範囲（行きがけ順）。当たり判定とキーボードの区画に使う
     function nestZone(x, y) {
       const S = BOX.size, H = BOX.halo;
       if (x < -H || y < -H || x >= S + H || y >= S + H) return null;
       if (x < 0 || y < 0 || x >= S || y >= S) return 'かまえ';
-      const k = nestHoles.findIndex(r => x >= r[0] && x < r[2] && y >= r[1] && y < r[3]);
+      // 穴の中に穴がある（外を外した囲いの中）ときは、内側を優先する。内側ほど後に描いている
+      const k = holeRects.findLastIndex(r => x >= r[0] && x < r[2] && y >= r[1] && y < r[3]);
       if (k >= 0) return 'あな' + k;
       const l = x < RING, r = x >= S - RING, t = y < RING, b = y >= S - RING;
       if (l && t) return 'たれ';
@@ -317,7 +327,7 @@
     // 環の位置を指したときの点線。当たる角や帯ではなく、包んだあとにその部品が占める形全体を見せる
     function nestZoneShape(pos) {
       const S = BOX.size, R = RING, k = holeK(pos);
-      if (k >= 0) return nestHoles[k] ? rectPath(nestHoles[k]) : '';
+      if (k >= 0) return holeRects[k] ? rectPath(holeRects[k]) : '';
       return {
         'かんむり': rectPath([0, 0, S, R]), 'あし': rectPath([0, S - R, S, S]),
         'へん': rectPath([0, 0, R, S]), 'つくり': rectPath([S - R, 0, S, S]),
@@ -425,7 +435,7 @@
     function paletteChips(pos) {
       // 穴は形が決まっているので、その穴に実際に来る部品を字数の多い順に並べる
       if (holeK(pos) >= 0) {
-        return [...nestPicks(pos)].filter(([p]) => p !== '?' && !isPlaceholder(p)).sort((a, b) => b[1].size - a[1].size)
+        return [...nestPicks(pos)].filter(([p]) => p !== '?' && !isPlaceholder(p) && !SIDE_SKIP.includes(p)).sort((a, b) => b[1].size - a[1].size)
           .map(([part]) => ({ part, glyph: part, yomi: readingOf(part), named: false }));
       }
       if (pos === 'ぶしゅ') {
@@ -541,15 +551,16 @@
        周りの環には、各位置に入る部品の見本を薄く置く（空の枠の見本と同じ役目） */
     function drawNest() {
       const S = BOX.size, R = RING, fills = [], glyphs = [];
-      nestHoles = [];
+      holeRects = [];
       if (!nestSteps.length) return;
       (function walk(n, r) {
-        if (n === null) { nestHoles.push(r); fills.push(`<path class="hole" d="${rectPath(inset(r, 3))}"/>`); return; }
+        if (n === null) { holeRects.push(r); fills.push(`<path class="hole" d="${rectPath(inset(r, 3))}"/>`); return; }
         if (typeof n === 'string') { fills.push(`<path d="${rectPath(inset(r, 1))}"/>`); glyphs.push(stretchGlyph(n, inset(r, 3))); return; }
         const [a, b] = IDS_RECTS[n.op].map(f => sub(r, f));
         if (NEST_ENCL.includes(n.op)) {
           fills.push(`<path d="${rectPath(inset(a, 1))}${rectPath(inset(b, -1))}"/>`);
-          glyphs.push(stretchGlyph(n.args[0], inset(a, 3)));
+          if (n.args[0] === null) { holeRects.push(a); fills.push(`<path class="hole" d="${rectPath(inset(a, 3))}"/>`); }
+          else glyphs.push(stretchGlyph(n.args[0], inset(a, 3)));
           walk(n.args[1], b);
           return;
         }
@@ -593,7 +604,7 @@
       }).join('');
       if (nestMode) drawNest();
       // キーボードでは区画をボタンとして順に移る。フォーカスした区画はホバーと同じく点線で見せる
-      const keys = ['かんむり', 'たれ', 'へん', 'つくり', 'にょう', 'あし', 'かまえ', ...(enclosure() ? ['なかみ'] : []), ...nestHoles.map((_, k) => 'あな' + k)];
+      const keys = ['かんむり', 'たれ', 'へん', 'つくり', 'にょう', 'あし', 'かまえ', ...(enclosure() ? ['なかみ'] : []), ...holeRects.map((_, k) => 'あな' + k)];
       el('pboxKeys').innerHTML = keys.map(p =>
         `<button type="button" data-pos="${p}" aria-label="${slotTitle(p)}${!nestMode && slots[p] ? `：${slots[p]}` : ''}"></button>`).join('');
       // 入れた部品は、束で選んだときのチップ（字と件数）のまま、枠の外のその側に出しておく。
@@ -671,7 +682,7 @@
         if (arrow) { e.preventDefault(); openPalette(arrow, true); }
         // 入れ子では位置ごとの部品を持たないので、最後に足した段を外す
         if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.dataset.pos) {
-          if (nestMode) setNestSteps(nestSteps.slice(0, -1)); else setSlot(e.target.dataset.pos, null);
+          if (nestMode) setNestSteps(dropStep(nestSteps, nestSteps.length - 1)); else setSlot(e.target.dataset.pos, null);
         }
       });
       document.addEventListener('pointerdown', e => {
@@ -826,7 +837,8 @@
     function activeConditions() {
       const live = liveSlots();
       const out = [
-        ...(nestMode ? nestSteps : []).map(([, part], i) => ({ label: stepLabel(i), value: part, off: () => setNestSteps(nestSteps.filter((_, j) => j !== i)) })),
+        ...(nestMode ? nestSteps : []).map(([, part], i) => part == null ? null
+          : { label: stepLabel(i), value: part, off: () => setNestSteps(dropStep(nestSteps, i)) }).filter(Boolean),
         ...Object.keys(live).map(pos => ({ label: SLOT_LABEL[pos], value: slotGlyph(pos, live[pos]), off: () => setSlot(pos, null) }))];
       const q = el('mjSearch').value.trim();
       if (q) out.push({ label: '検索', value: q, off: () => { el('mjSearch').value = ''; pushNext = true; runSearch(); } });
@@ -885,7 +897,8 @@
     function zeroHtml() {
       // 入れ子の段は、その段を外して組み直したときの字数
       const nestTips = (nestMode ? nestSteps : []).map(([, part], i) => {
-        const T = conditionChars(null, nestSteps.filter((_, j) => j !== i));
+        if (part == null) return '';
+        const T = conditionChars(null, dropStep(nestSteps, i));
         return `<button type="button" class="cond" data-step="${i}">${stepLabel(i)} <b>${part}</b> を外すと ${T ? T.size.toLocaleString() : 'すべての'}字</button>`;
       });
       const tips = Object.keys(liveSlots()).flatMap(pos => {
@@ -985,7 +998,8 @@
       const st = readState(), p = new URLSearchParams();
       Object.keys(st.slots).forEach(pos => p.set(pos, st.slots[pos]));
       if (st.nest) p.set('nest', '1');
-      st.steps.forEach(([pos, part, k]) => p.append('n', pos === 'あな' ? `あな${k}${part}` : pos + part));   // 段の順が形を決めるので並べたまま持つ
+      // 段の順が形を決めるので並べたまま持つ。穴埋めは経路の数字を、穴に戻した段は位置だけを書く
+      st.steps.forEach(([pos, part, path]) => p.append('n', pos === 'あな' ? `あな${path.join('')}${part}` : pos + (part || '')));
       if (st.q) p.set('q', st.q);
       if (st.jinmei) p.set('jinmei', '1');
       if (st.shrink) p.set('shrink', '1');
@@ -998,10 +1012,10 @@
       p.forEach((v, k) => { if (SLOT_LABEL[k]) st.slots[k] = v; });
       st.nest = p.get('nest') === '1';
       st.steps = p.getAll('n').map(v => {
-        const h = v.match(/^あな(\d+)(.+)$/u);
-        if (h) return ['あな', h[2], +h[1]];
+        const h = v.match(/^あな([01]+)(.+)$/u);
+        if (h) return ['あな', h[2], Array.from(h[1], Number)];
         const pos = Object.keys(NEST_OP).find(k => v.startsWith(k));
-        return pos && v.length > pos.length ? [pos, v.slice(pos.length)] : null;
+        return pos ? [pos, v.slice(pos.length) || null] : null;
       }).filter(Boolean);
       st.q = p.get('q') || '';
       st.jinmei = p.get('jinmei') === '1';
@@ -1085,7 +1099,7 @@
         container.innerHTML = zeroHtml();
         container.querySelectorAll('[data-off]').forEach(b => { b.onclick = () => setSlot(b.dataset.off, null); });
         container.querySelectorAll('[data-to]').forEach(b => { b.onclick = () => setSlot(b.dataset.pos, b.dataset.to); });
-        container.querySelectorAll('[data-step]').forEach(b => { b.onclick = () => setNestSteps(nestSteps.filter((_, j) => j !== +b.dataset.step)); });
+        container.querySelectorAll('[data-step]').forEach(b => { b.onclick = () => setNestSteps(dropStep(nestSteps, +b.dataset.step)); });
         sections = [];
       }
       relayout();        // 高さを入れて位置を測り直し、見えている窓だけ描く
