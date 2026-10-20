@@ -1076,6 +1076,18 @@
         + (tips.length ? `<div class="zero-tips">${tips.join('')}</div>` : '') + '</div>';
     }
 
+    /* 字の部品を条件に入れる操作（右クリックのメニューと、カードの「構成」のボタン）。部首検索ではその位置の部品にする。
+       組立検索では、一番外のその側が空いていれば埋め、空いていなければ外を包む（枠の環を押したのと同じ）。
+       中身は囲いの中が空いているときだけ入れられる。入れられないときは null */
+    function partAction(pos, part) {
+      if (!isNestPos(pos)) return () => setSlot(pos, part);
+      if (pos === 'なかみ') {
+        const k = nestHoles(nestNow()).findIndex(h => h.role === 'なかみ');
+        return k >= 0 ? () => pick('あな' + k, part) : null;
+      }
+      return NEST_OP[pos] ? () => pick(ringFills()[pos] || pos, part) : null;
+    }
+
     /* 字から条件へ（query by example）: カードを押した字の直下の部品をボタンで並べ、押すとその位置に入れる。 */
     let partsChar = null;
     function showCharParts(ch) {
@@ -1095,7 +1107,10 @@
         b.type = 'button';
         b.textContent = pos === 'ぶしゅ' ? radicalLabel(base, part) : `${SLOT_LABEL[pos]} ${slotGlyph(pos, part)}`;
         b.setAttribute('aria-pressed', !isNestPos(pos) && slots[pos] === part);
-        b.onclick = () => pick(pos, part);
+        // 部首検索では押し直すと外す（入っている部品は押した状態で見せている）
+        const act = isNestPos(pos) ? partAction(pos, part) : () => pick(pos, part);
+        b.disabled = !act;
+        b.onclick = act;
         box.appendChild(b);
       });
     }
@@ -2411,6 +2426,12 @@
         const g = slotGlyph('ぶしゅ', rad);
         items.push({ label: `${radicalLabel(base, rad).replace(g + '部', `<b>${g}</b>部`)} をコピー`, run: () => copyText(g, `「${g}」`) });
       }
+      // 同じ部品を、コピーせずにそのまま条件へ入れる
+      const adds = [...parts.filter(([pos, part], i) => parts.findIndex(([q, r]) => q === pos && r === part) === i), ...(rad ? [['ぶしゅ', rad]] : [])]
+        .map(([pos, part]) => [pos, part, partAction(pos, part)]).filter(([, , run]) => run);
+      if (adds.length) items.push(null);
+      adds.forEach(([pos, part, run]) => items.push({
+        label: `${pos === 'ぶしゅ' ? `辞書の部首 <b>${slotGlyph(pos, part)}</b>部` : `${SLOT_LABEL[pos]} <b>${part}</b>`} を条件に入れる`, run }));
       openCtxMenu(e.clientX, e.clientY, `「${base}」`, items);
     }
     /* 字の MJ 番号。外字の札（IVS 付き）はその字形の MJ、水準字はその面区点の例示字形（代表）の MJ。
