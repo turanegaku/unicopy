@@ -280,9 +280,11 @@
     .ctx-menu button { display: block; width: 100%; padding: 6px 12px; border: none; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
     .ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--main-soft); outline: none; }
     .ctx-menu b { font-family: "Noto Serif JP", serif; font-weight: normal; }
-    .ctx-row { display: flex; align-items: center; padding-left: 12px; }
-    .ctx-row span { flex: 1; padding: 6px 8px 6px 0; white-space: nowrap; }
-    .ctx-menu .ctx-row button { width: auto; padding: 6px 8px; color: var(--main-strong); white-space: nowrap; }
+    .ctx-row { display: flex; }
+    .ctx-menu .ctx-row button { display: flex; gap: 16px; width: auto; white-space: nowrap; }
+    .ctx-menu .ctx-row button:first-child { flex: 1; }
+    .ctx-name { flex: 1; }
+    .ctx-act { color: var(--main-strong); }
     #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 4px; display: none; z-index: 1000; font-size: var(--fs-2); }
     .empty-msg { text-align: left; color: var(--faint); padding: 10px; font-size: var(--fs-2); grid-column: 1 / -1; }
 

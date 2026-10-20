@@ -2417,15 +2417,22 @@
       const rad = dictRadicalOf(base);
       const same = sameShapeSteps(base);
       if (parts.length || rad || same) items.push(null);
-      if (same) items.push({ label: 'この字と同じ組み立てで探す', run: () => {
+      // 条件に入れたら、結果の確かめと続きの操作のために枠のある一番上へ戻る（一覧の奥で右クリックしていることが多い）。
+      // 一瞬で飛ぶとどこへ来たか分からないので流して送る（動きを減らす設定のときは飛ぶ）
+      const toTop = run => () => {
+        run();
+        window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      };
+      if (same) items.push({ label: 'この字と同じ組み立てで探す', run: toTop(() => {
         nestMode = true;
         syncMode();
         setNestSteps(same);
-      } });
+      }) });
       // 部品ごとに 1 行。コピーと条件に入れるを同じ行に並べる（別の行にすると部品の数の倍の行になってかさばる）
       const row = (label, copy, pos, part) => {
         const add = partAction(pos, part);
-        return { label, actions: [{ text: 'コピー', run: () => copyText(copy, `「${copy}」`) }, ...(add ? [{ text: '条件に入れる', run: add }] : [])] };
+        // 入れられない部品も 2 つ目の操作の場所は空けておく。詰めると、その行だけ「コピー」の位置がずれる
+        return { label, actions: [{ text: 'コピー', run: () => copyText(copy, `「${copy}」`) }, { text: '条件に入れる', run: add && toTop(add) }] };
       };
       const seen = new Set();
       parts.forEach(([pos, part]) => {
@@ -2483,14 +2490,16 @@
       items.forEach(it => {
         if (!it) { m.appendChild(Object.assign(document.createElement('div'), { className: 'ctx-sep' })); return; }
         if (it.actions) {
-          // 1 つのものに操作が複数あるときは、名前の横に操作のボタンを並べる
+          // 1 つのものに操作が複数あるときは 1 行に並べる。先頭の操作は名前ごと 1 つのボタンにして、
+          // 行のどこを押してもその操作になるようにする（名前を押せないと当たる所が小さい）
           const r = Object.assign(document.createElement('div'), { className: 'ctx-row' });
-          r.appendChild(Object.assign(document.createElement('span'), { innerHTML: it.label }));
-          it.actions.forEach(x => {
-            const b = Object.assign(document.createElement('button'), { type: 'button', textContent: x.text });
+          it.actions.forEach((x, i) => {
+            const b = Object.assign(document.createElement('button'), { type: 'button' });
+            b.innerHTML = i ? '' : `<span class="ctx-name">${it.label}</span>`;
+            b.appendChild(Object.assign(document.createElement('span'), { className: 'ctx-act', textContent: x.text }));
             b.setAttribute('role', 'menuitem');
-            b.setAttribute('aria-label', `${r.textContent} ${x.text}`);
-            b.onclick = () => { closeCtxMenu(); x.run(); };
+            if (x.run) b.onclick = () => { closeCtxMenu(); x.run(); };
+            else { b.disabled = true; b.style.visibility = 'hidden'; }
             r.appendChild(b);
           });
           m.appendChild(r);
@@ -2518,7 +2527,7 @@
       if (e.key === 'Escape') { closeCtxMenu(); return; }
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       e.preventDefault();
-      const bs = [...m.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+      const bs = [...m.querySelectorAll('button:not([disabled])')], i = bs.indexOf(document.activeElement);
       bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
     });
     el("kanjiContainer").addEventListener("contextmenu", e => {
