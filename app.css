@@ -64,6 +64,14 @@
     .finder-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; width: 100%; }
     .finder-side .find-row { grid-template-columns: 1fr; }
     .pbox-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    /* 枠の使い方の切り替え。枠の真上に置き、2 つで 1 つの部品に見えるよう境目の線を共有する */
+    .pbox-mode { display: flex; }
+    .pbox-mode button { box-sizing: border-box; min-height: 32px; padding: 4px 16px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: var(--fs-2); color: var(--muted); cursor: pointer; }
+    .pbox-mode button + button { border-left: none; }
+    .pbox-mode button:first-child { border-radius: 4px 0 0 4px; }
+    .pbox-mode button:last-child { border-radius: 0 4px 4px 0; }
+    .pbox-mode button:hover { background: var(--main-soft); }
+    .pbox-mode button[aria-checked="true"] { border-color: var(--main); background: var(--main); color: var(--on-main); font-weight: bold; }
     /* 周りの余白は、入れた部品のチップを枠の外の四方に置く場所。部品を入れても枠が動かないよう常に空けておく */
     /* 上下の余白は冠・脚のチップの置き場所。入れ外しで余白を変えると、すべて外した瞬間に下の行が飛び、
        「元に戻す」がカーソルの下から逃げるので、常に空けておく */

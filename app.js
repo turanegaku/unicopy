@@ -262,7 +262,8 @@
     /* 入れ子で組むモード。枠で選んだ順（nestSteps）から内側から外へ形を組み、その形を含む字を引く。
        形の組み方と照合は parts.js の nestStep / makeNest。位置でない なし・辞書の部首は、どちらのモードでも slots に持つ。
        枠では、いままでの形を真ん中に描き、周りの環で外を包む位置を、形の中の穴（あな0, あな1…）で埋める所を指す */
-    let nestMode = false, nestSteps = [], nestM = null, nestUniverse = [];
+    // 使う場面は「字の画像を見ながら同じ字を探す」なので、形が見えている前提の入れ子を既定にする
+    let nestMode = true, nestSteps = [], nestM = null, nestUniverse = [];
     const nestCache = new Map();
     const NEST_FREE = ['なし', 'ぶしゅ'];
     const nestNow = () => nestTree(nestSteps);
@@ -507,6 +508,10 @@
       const area = document.createElement('div');
       area.className = 'pbox-area';
       area.innerHTML = `
+        <div class="pbox-mode" role="radiogroup" aria-label="枠の使い方">
+          <button type="button" role="radio" data-nest="1" title="内側の部首から順に選び、外側へ積み上げて字を組み立てる。偏→冠 と 冠→偏 で形が変わる">組立検索</button>
+          <button type="button" role="radio" data-nest="0" title="入っている部首と、それが字のどの辺りにあるかで絞る。選ぶ順は問わない">部首検索</button>
+        </div>
         <div class="pbox" id="pbox">
           <div class="pbox-hit" id="pboxHit">
             <div class="pbox-halo" aria-hidden="true"></div>
@@ -529,7 +534,6 @@
           <div class="pbox-clear" id="pboxClear"></div>
         </div>
         <div class="pbox-extra">
-          <label class="switch" title="枠で選んだ順に、内側から外へ字の形を組んで引く。偏→冠 と 冠→偏 で形が変わる"><input type="checkbox" id="nestMode"> 入れ子で組む</label>
           <button type="button" class="pbox-btn" data-pos="なし"></button>
           <button type="button" class="pbox-btn" data-pos="ぶしゅ"></button>
         </div>
@@ -546,10 +550,15 @@
 
       // 右の列へ移したあとなので、枠の中ではなく文書全体から探す
       document.querySelectorAll('.pbox-btn').forEach(b => { b.onclick = () => openPalette(b.dataset.pos); });
-      el('nestMode').onchange = e => { nestMode = e.target.checked; closePalette(); pushNext = true; renderKanji(); };
+      document.querySelectorAll('.pbox-mode button').forEach(b => {
+        b.onclick = () => { nestMode = b.dataset.nest === '1'; syncMode(); closePalette(); pushNext = true; renderKanji(); };
+      });
+      syncMode();
       wirePbox();
       drawPbox();
     }
+
+    const syncMode = () => document.querySelectorAll('.pbox-mode button').forEach(b => b.setAttribute('aria-checked', (b.dataset.nest === '1') === nestMode));
 
     /* ---- 枠の描画と操作 ---- */
     let previewPos = null;
@@ -1010,7 +1019,8 @@
       });
       add('span', 'n', `${total.toLocaleString()}字`);
       const note = gaijiState === 'building' ? '外字を索引中' : gaijiState === 'old' ? '外字は部品で引けません（mjmap.json が古い）' : '';
-      if (note && (Object.keys(liveSlots()).length || nestMode && nestSteps.length)) add('span', 'note', note);
+      // 索引中は部首検索の索引の話（組立検索は外字も初めから照合する）。古い mjmap はどちらも外字の IDS を持たない
+      if (note && (Object.keys(liveSlots()).length || nestMode && nestSteps.length && gaijiState === 'old')) add('span', 'note', note);
       // すべて外す・元に戻すは、操作の起点の枠のすぐ下に置く（右の列だと枠から遠い）
       const clr = el('pboxClear');
       clr.innerHTML = '';
@@ -1133,7 +1143,7 @@
       slots = { ...st.slots };
       nestMode = !!st.nest;
       nestSteps = st.steps || [];
-      el('nestMode').checked = nestMode;
+      syncMode();
       el('mjSearch').value = st.q || '';
       el('onlyJinmei').checked = !!st.jinmei;
       el('onlyShrink').checked = !!st.shrink;
@@ -1143,7 +1153,7 @@
     function stateHash() {
       const st = readState(), p = new URLSearchParams();
       Object.keys(st.slots).forEach(pos => p.set(pos, st.slots[pos]));
-      if (st.nest) p.set('nest', '1');
+      if (st.nest !== nestByDefault(st.slots)) p.set('nest', st.nest ? '1' : '0');   // 読み手の推し量りと違うときだけ書く
       // 段の順が形を決めるので並べたまま持つ。穴埋めは経路の数字を、穴に戻した段は位置だけを書く
       st.steps.forEach(([pos, part, path]) => p.append('n', pos === 'あな' ? `あな${path.join('')}${part}` : pos + (part || '')));
       if (st.q) p.set('q', st.q);
@@ -1153,10 +1163,12 @@
       const h = p.toString();
       return h ? '#' + h : '';
     }
+    // nest の無い URL のモード。入れ子を既定にする前の URL は、位置に部品が入っていればラフのもの
+    const nestByDefault = sl => !Object.keys(sl).some(k => !NEST_FREE.includes(k));
     function hashState() {
       const p = new URLSearchParams(location.hash.slice(1)), st = { slots: {} };
       p.forEach((v, k) => { if (SLOT_LABEL[k]) st.slots[k] = v; });
-      st.nest = p.get('nest') === '1';
+      st.nest = p.has('nest') ? p.get('nest') !== '0' : nestByDefault(st.slots);
       st.steps = p.getAll('n').map(v => {
         const h = v.match(/^あな([01]+)(.+)$/u);
         if (h) return ['あな', h[2], Array.from(h[1], Number)];
