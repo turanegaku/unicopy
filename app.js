@@ -949,12 +949,15 @@
       const chips = paletteChips(pos);
       const fam = new Set(Array.from(t).map(radFamily));
       const match = c => fam.has(radFamily(c.glyph)) || (c.yomi && c.yomi.includes(t)) || (pos === 'ぶしゅ' && c.part === t);
-      const base = chips.some(c => c.named) ? chips.filter(c => c.named) : chips.slice(0, 30);
-      const shown = t ? chips.filter(match) : paletteAll ? chips : base;
+      // 件数のある部品を先に並べる（並びの中は元の順のまま）。いまの条件で 0 件の部首が先頭を埋めると、
+      // 当たる部品が「ほか」の奥に隠れる。最初に見せる数は今までどおり（呼び名のある部首の数か 30）
+      const counted = chips.map(c => ({ c, n: partCount(pos, c.part, T) }));
+      const ordered = [...counted.filter(x => x.n), ...counted.filter(x => !x.n)];
+      const baseN = chips.some(c => c.named) ? chips.filter(c => c.named).length : 30;
+      const shown = t ? ordered.filter(x => match(x.c)) : paletteAll ? ordered : ordered.slice(0, baseN);
       const box = pal.querySelector('.pal-chips');
       box.innerHTML = '';
-      shown.forEach(c => {
-        const n = partCount(pos, c.part, T);
+      shown.forEach(({ c, n }) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'pchip' + (n ? '' : ' zero');
