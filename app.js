@@ -1076,6 +1076,18 @@
         + (tips.length ? `<div class="zero-tips">${tips.join('')}</div>` : '') + '</div>';
     }
 
+    /* 字の部品を条件に入れる操作（右クリックのメニューと、カードの「構成」のボタン）。部首検索ではその位置の部品にする。
+       組立検索では、一番外のその側が空いていれば埋め、空いていなければ外を包む（枠の環を押したのと同じ）。
+       中身は囲いの中が空いているときだけ入れられる。入れられないときは null */
+    function partAction(pos, part) {
+      if (!isNestPos(pos)) return () => setSlot(pos, part);
+      if (pos === 'なかみ') {
+        const k = nestHoles(nestNow()).findIndex(h => h.role === 'なかみ');
+        return k >= 0 ? () => pick('あな' + k, part) : null;
+      }
+      return NEST_OP[pos] ? () => pick(ringFills()[pos] || pos, part) : null;
+    }
+
     /* 字から条件へ（query by example）: カードを押した字の直下の部品をボタンで並べ、押すとその位置に入れる。 */
     let partsChar = null;
     function showCharParts(ch) {
@@ -1095,7 +1107,10 @@
         b.type = 'button';
         b.textContent = pos === 'ぶしゅ' ? radicalLabel(base, part) : `${SLOT_LABEL[pos]} ${slotGlyph(pos, part)}`;
         b.setAttribute('aria-pressed', !isNestPos(pos) && slots[pos] === part);
-        b.onclick = () => pick(pos, part);
+        // 部首検索では押し直すと外す（入っている部品は押した状態で見せている）
+        const act = isNestPos(pos) ? partAction(pos, part) : () => pick(pos, part);
+        b.disabled = !act;
+        b.onclick = act;
         box.appendChild(b);
       });
     }
@@ -2400,18 +2415,51 @@
       if (mj) items.push({ label: `${mj} をコピー`, run: () => copyText(mj, mj) });
       const parts = topParts(base, lookupIds);
       const rad = dictRadicalOf(base);
-      if (parts.length || rad) items.push(null);
+      const same = sameShapeSteps(base);
+      if (parts.length || rad || same) items.push(null);
+      // 条件に入れたら、結果の確かめと続きの操作のために枠のある一番上へ戻る（一覧の奥で右クリックしていることが多い）。
+      // 一瞬で飛ぶとどこへ来たか分からないので流して送る（動きを減らす設定のときは飛ぶ）
+      const toTop = run => () => {
+        run();
+        window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      };
+      if (same) items.push({ label: 'この字と同じ組み立てで探す', run: toTop(() => {
+        nestMode = true;
+        syncMode();
+        setNestSteps(same);
+      }) });
+      // 部品ごとに 1 行。コピーと条件に入れるを同じ行に並べる（別の行にすると部品の数の倍の行になってかさばる）
+      const row = (label, copy, pos, part) => {
+        const add = partAction(pos, part);
+        // 入れられない部品も 2 つ目の操作の場所は空けておく。詰めると、その行だけ「コピー」の位置がずれる
+        return { label, actions: [{ text: 'コピー', run: () => copyText(copy, `「${copy}」`) }, { text: '条件に入れる', run: add && toTop(add) }] };
+      };
       const seen = new Set();
       parts.forEach(([pos, part]) => {
         if (seen.has(pos + part)) return;
         seen.add(pos + part);
-        items.push({ label: `${SLOT_LABEL[pos]} <b>${part}</b> をコピー`, run: () => copyText(part, `「${part}」`) });
+        items.push(row(`${SLOT_LABEL[pos]} <b>${part}</b>`, part, pos, part));
       });
       if (rad) {
         const g = slotGlyph('ぶしゅ', rad);
-        items.push({ label: `${radicalLabel(base, rad).replace(g + '部', `<b>${g}</b>部`)} をコピー`, run: () => copyText(g, `「${g}」`) });
+        items.push(row(radicalLabel(base, rad).replace(g + '部', `<b>${g}</b>部`), g, 'ぶしゅ', rad));
       }
       openCtxMenu(e.clientX, e.clientY, `「${base}」`, items);
+    }
+    /* 字の一番外の組み立てを、組立検索の段にする（椅 ⿰木奇 -> 偏 木、空いた所 奇）。
+       引数が部品 1 字でなく形のときは、その側は穴のままにする。位置に言えない字（⿻・⿲⿳）は null */
+    function sameShapeSteps(ch) {
+      const r = idsArgs(lookupIds(ch));
+      if (!r) return null;
+      const [op, args] = r;
+      const pos = { '⿰': ['へん', 'つくり'], '⿱': ['かんむり', 'あし'], '⿸': ['たれ'], '⿺': ['にょう'] }[op]
+        || ('⿴⿵⿶⿷⿹'.includes(op) || (op === '⿻' && args[0] === '冂') ? ['かまえ'] : null);
+      if (!pos) return null;
+      const one = a => Array.from(a).length === 1 && !isPlaceholder(a) ? a : null;
+      const [a0, a1] = args.map(one);
+      // 1 段目は外側（囲い）か左・上の部品。それが形なら、右・下の部品から始めて反対側を穴にする
+      if (a0) return [[pos[0], a0], ...(a1 ? [['あな', a1, [1]]] : [])];
+      return a1 && pos[1] ? [[pos[1], a1]] : null;
     }
     /* 字の MJ 番号。外字の札（IVS 付き）はその字形の MJ、水準字はその面区点の例示字形（代表）の MJ。
        mjmap を読んでいないときは出さない */
@@ -2441,6 +2489,22 @@
       m.innerHTML = `<div class="ctx-title">${title}</div>`;
       items.forEach(it => {
         if (!it) { m.appendChild(Object.assign(document.createElement('div'), { className: 'ctx-sep' })); return; }
+        if (it.actions) {
+          // 1 つのものに操作が複数あるときは 1 行に並べる。先頭の操作は名前ごと 1 つのボタンにして、
+          // 行のどこを押してもその操作になるようにする（名前を押せないと当たる所が小さい）
+          const r = Object.assign(document.createElement('div'), { className: 'ctx-row' });
+          it.actions.forEach((x, i) => {
+            const b = Object.assign(document.createElement('button'), { type: 'button' });
+            b.innerHTML = i ? '' : `<span class="ctx-name">${it.label}</span>`;
+            b.appendChild(Object.assign(document.createElement('span'), { className: 'ctx-act', textContent: x.text }));
+            b.setAttribute('role', 'menuitem');
+            if (x.run) b.onclick = () => { closeCtxMenu(); x.run(); };
+            else { b.disabled = true; b.style.visibility = 'hidden'; }
+            r.appendChild(b);
+          });
+          m.appendChild(r);
+          return;
+        }
         const b = document.createElement('button');
         b.type = 'button';
         b.setAttribute('role', 'menuitem');
@@ -2463,7 +2527,7 @@
       if (e.key === 'Escape') { closeCtxMenu(); return; }
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       e.preventDefault();
-      const bs = [...m.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+      const bs = [...m.querySelectorAll('button:not([disabled])')], i = bs.indexOf(document.activeElement);
       bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
     });
     el("kanjiContainer").addEventListener("contextmenu", e => {
