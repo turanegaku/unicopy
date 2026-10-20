@@ -4,7 +4,8 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { PART_IDS, DICT_RADICALS, makeParts, topParts, buildPartIndex, boxZone } = require('../parts.js');
+const { PART_IDS, DICT_RADICALS, makeParts, topParts, buildPartIndex, boxZone,
+        nestTree, nestHoles, nestText, makeNest, CAPTURE } = require('../parts.js');
 
 const partsOf = makeParts(c => PART_IDS[c]);
 const has = (ch, pos, ...ps) => ps.forEach(p => assert(partsOf(ch)?.[pos]?.has(p), `${ch} の ${pos} に ${p} が無い`));
@@ -42,6 +43,43 @@ assert.strictEqual(boxZone(88, 88, 'かまえ'), 'なかみ');       // 囲い�
 assert.strictEqual(boxZone(130, 130, 'たれ'), 'なかみ');
 assert.strictEqual(boxZone(130, 40, 'にょう'), 'なかみ');
 assert.strictEqual(boxZone(87, 88), 'へん');                    // 中央線ちょうどは右半分（旁）
+
+// 入れ子で組む。位置を選ぶと外を包み、あな は形の中の空いた所を経路で指して埋める。偏と冠のどちらを先に選んだかで形が変わる
+const nt = (...steps) => nestText(nestTree(steps));
+assert.strictEqual(nt(['かんむり', '大'], ['あな', '可', [1]], ['へん', '木']), '⿰木⿱大可');
+assert.strictEqual(nt(['へん', '木'], ['かんむり', '艹']), '⿱艹⿰木□');
+assert.strictEqual(nt(['かんむり', '艹'], ['へん', '木']), '⿰木⿱艹□');
+assert.strictEqual(nt(['へん', '亻'], ['へん', '木']), '⿰木⿰亻□');
+assert.strictEqual(nt(['かまえ', '門'], ['あな', '日', [1]]), '⿴門日');
+assert.strictEqual(nt(['へん', '木'], ['かんむり', '艹'], ['あな', '口', [1, 1]]), '⿱艹⿰木口');   // 経路は埋めた時点の形の根から
+assert.deepStrictEqual(nestHoles(nestTree([['へん', '木'], ['かんむり', '艹']])), [{ path: [1, 1], role: 'つくり' }]);
+assert.deepStrictEqual(nestHoles(nestTree([['にょう', '辶']])), [{ path: [1], role: 'なかみ' }]);
+// 途中の段の部品を穴に戻しても、後の段の位置は変わらない（⿰氵⿱𭕄田 から 𭕄 を外すと ⿰氵⿱□田）
+assert.strictEqual(nt(['かんむり', null], ['あな', '田', [1]], ['へん', '氵']), '⿰氵⿱◇田');
+assert.deepStrictEqual(nestHoles(nestTree([['つくり', null], ['あな', '糸', [0]]])), [{ path: [1], role: 'つくり' }]);   // 埋め直せる
+assert.strictEqual(nt(['かんむり', '大'], ['へん', '木'], ['あな', '可', [1]]), '⿰木⿱大□');   // 古い経路は何もしない
+
+const nest = makeNest(c => PART_IDS[c], p => p === '人' ? ['人', '亻'] : [p]);
+const hits = (ch, ...steps) => assert(nest.test(ch, nestTree(steps)), `${ch} が ${nt(...steps)} に当たらない`);
+const miss = (ch, ...steps) => assert(!nest.test(ch, nestTree(steps)), `${ch} が ${nt(...steps)} に当たる`);
+hits('椅', ['かんむり', '大'], ['へん', '木']);                    // 奇 を ⿱大可 に開いて当てる
+hits('椅', ['かんむり', '大'], ['あな', '可', [1]], ['へん', '木']);
+miss('椅', ['へん', '木'], ['かんむり', '大']);                     // 順が逆なら ⿱大⿰木□ で当たらない
+hits('淄', ['かんむり', '巛'], ['あな', '田', [1]]);                  // 外がまだ決まっていない形は、部品のどこかにあれば当てる
+hits('淄', ['かんむり', '巛'], ['あな', '田', [1]], ['へん', '氵']);
+miss('淄', ['かんむり', '巛'], ['あな', '田', [1]], ['つくり', '氵']);
+hits('森', ['へん', '木']); miss('林', ['かんむり', '木']);   // 森 = ⿱木林 は 林 の中に ⿰木□
+hits('熒', ['へん', '火'], ['あな', '火', [1]], ['あし', '火']);  // 前の段の形は、外の段のその側に含まれていればよい
+miss('熒', ['へん', '火'], ['あな', '火', [1]], ['かんむり', '火']);
+// 外した所は、穴としても、段ごと無いものとしても当てる（⿰(⿰糸◇)戠 は 織 = ⿰糸戠 に当たる）
+hits('織', ['つくり', null], ['あな', '糸', [0]], ['つくり', '戠']);
+hits('淄', ['かんむり', null], ['あな', '田', [1]], ['へん', '氵']);
+hits('倣', ['へん', '人']);                                          // 字体の同一視
+hits('倣', ['へん', '亻'], ['あな', '攵', [1]]);                     // 部品 1 字もその側のどこかにあればよい
+hits('街', ['へん', '彳']); hits('街', ['つくり', '亍']);            // ⿲ はどちらの割り方でも
+hits('国', ['かまえ', '囗'], ['あな', '玉', [1]]);
+hits('道', ['にょう', '辶']); miss('道', ['たれ', '辶']);
+assert(['奇', '大', '可', '口'].every(p => nest.capture('椅', { op: '⿰', args: ['木', CAPTURE] }).includes(p)));   // 側の中の部品すべて
 
 const mm = path.join(__dirname, '..', 'mjmap.json');
 if (fs.existsSync(mm)) {
