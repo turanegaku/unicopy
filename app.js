@@ -1366,7 +1366,8 @@
       const it = listOrder[i];
       const title = it.mj
         ? `「${it.char}」 ${it.mj} U+${it.char.codePointAt(0).toString(16).toUpperCase()} ${it.blk}`
-        : `「${it.char}」 ${charJis.get(it.char) || (it.ku == null ? `第${it.level}水準` : `第${it.level}水準 区${it.ku}`)}`;
+        : `「${it.char}」 ${charJis.get(it.char) || (it.ku == null ? `第${it.level}水準` : `第${it.level}水準 区${it.ku}`)}`
+          + (JIS_IVS[it.char] ? "\n" + jisIvsNote(it.char) : "");
       // 光らせる1枚はDOMではなく添字で持っているので（flashI）、ここで着せ直す
       const hot = i === flashI;
       return cardHtml(`lvl${it.level}${hot ? " flash" : ""}`, it.char, title,
@@ -1508,6 +1509,18 @@
     const tokDot = ch => TOK.has(ch) ? '<span class="tok-dot" title="tokenizer.json の語彙にある字"></span>' : '';
     const push = (map, k, v) => { const a = map.get(k); a ? a.push(v) : map.set(k, [v]); };
     const mjName = num => "MJ" + String(num).padStart(6, "0");
+    /* 飴 蛸 騙 など38字は、IPAmj明朝がセレクタ無しを古い形（住基）で、ふつうの書体が新しい形（JIS 例示字形）で描く。
+       char-annot・活字帳の文字認識と同じく「セレクタ無し ＝ 例示字形」とし、古い形はセレクタ付きで書き分ける（jis-ivs.js）。
+       IPAmj明朝が無いと Noto で描かれ、セレクタ付きでも新旧が同じ形になる。字形の画像は配らないので、そこは説明で補う */
+    const JIS_IVS_GLYPH = new Map(Object.entries(JIS_IVS).flatMap(([b, r]) => [[r.new[0], [b, "new"]], [r.old[0], [b, "old"]]]));
+    // 字形の説明。セレクタ無しの38字と、その新旧の字形に添える
+    function jisIvsNote(ch) {
+      const r = JIS_IVS[ch];
+      if (r) return `IPAmj明朝ではこの符号は旧字形で描かれる。旧字形は ${r.old[0]}（${r.old[1]}・セレクタ付き）`;
+      const g = JIS_IVS_GLYPH.get(ch);
+      if (!g) return "";
+      return g[1] === "new" ? `＝第1水準の ${g[0]} と同じ形（JIS 例示字形）` : "旧字形（IPAmj明朝の既定・住基）";
+    }
     /* 縮退の根拠。mjmap.json の縮退先は1エッジにこのビットを複数立てて持つ（meta.bits に同じ並び）。
        bit0 はJIS例示字形（下の BIT_REP）で根拠の選択の対象外なので、SRC は bit1 から始まる。
        強い順に並べてあり、線種は立っている根拠のうち一番強いもので決める。
@@ -1596,6 +1609,7 @@
       b.textContent = useIPAmj ? "MJ字形: IPAmj明朝" : "MJ字形: 既定の明朝";
       b.className = "font-status-btn " + (useIPAmj ? "status-active" : "status-inactive");
       b.title = (ipamjInstalled ? "IPAmj明朝を検出しました。" : "IPAmj明朝は検出できませんでした（入っていても検出を外すことがあります）。")
+        + (useIPAmj ? "" : "異体字（IVS 付き）の形は正しくないことがあります。")
         + "クリックで描画に使う/使わないを切り替えます";
       document.body.classList.toggle("no-mjfont", !useIPAmj);
     }
@@ -2021,8 +2035,9 @@
     }
 
     function nodeHtml(x, top, color, ch, meta, on, tint, copy) {
+      const note = jisIvsNote(ch);
       return `<div class="tree-node${on ? " hit" : ""}" style="left:${x}px;top:${top}px">`
-        + `<span class="g" style="color:${color}${on ? ";background:" + tint + "40" : ""}" data-c="${ch}" data-k="${ch}">${ch}</span>`
+        + `<span class="g" style="color:${color}${on ? ";background:" + tint + "40" : ""}" data-c="${ch}" data-k="${ch}"${note ? ` title="${note}"` : ""}>${ch}</span>`
         + `<span class="m"${copy ? ` data-copy="${copy}" title="クリックでコピー"` : ""}>${meta}</span></div>`;
     }
 
@@ -2413,6 +2428,13 @@
       items.push({ label: `${ucs} をコピー`, run: () => copyText(ucs, ucs) });
       const mj = mjNameOf(ch);
       if (mj) items.push({ label: `${mj} をコピー`, run: () => copyText(mj, mj) });
+      // 38字は新旧どちらの形からでも、もう片方を辿れるようにする。新しい形はセレクタ無しを渡す（char-annot もそこへ揃える）
+      const iv = JIS_IVS[base];
+      if (iv && (ch === base || JIS_IVS_GLYPH.has(ch))) {
+        const old = iv.old[0];
+        if (ch !== base) items.push({ label: `例示字形（${base}）をコピー`, run: () => copyText(base, `「${base}」`) });
+        if (ch !== old) items.push({ label: `旧字形（${iv.old[1]}）をコピー`, run: () => copyText(old, `旧字形「${old}」`) });
+      }
       const parts = topParts(base, lookupIds);
       const rad = dictRadicalOf(base);
       const same = sameShapeSteps(base);
