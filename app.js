@@ -2412,6 +2412,31 @@
     });
     el("treePane").addEventListener("mouseleave", () => setHover(null));
 
+    /* ツリーの字は小さく、異体字どうしの細部を見比べにくい。カーソルを留めたら少し後に大きく出す。
+       すぐ出すと、ツリーをなぞるだけで次々に開いてうるさいので待たせる */
+    let zoomTimer = 0;
+    function hideTreeZoom() { clearTimeout(zoomTimer); const z = el("treeZoom"); if (z) z.remove(); }
+    el("treePane").addEventListener("mouseover", e => {
+      const g = e.target.closest(".g");
+      if (!g || e.relatedTarget && g.contains(e.relatedTarget)) return;
+      hideTreeZoom();
+      zoomTimer = setTimeout(() => {
+        if (!g.isConnected) return;   // 待つあいだにスクロールで組み直されていたら出さない
+        const z = Object.assign(document.createElement("div"), { id: "treeZoom", className: "tree-zoom", textContent: g.dataset.c });
+        document.body.appendChild(z);
+        const r = g.getBoundingClientRect(), zr = z.getBoundingClientRect();
+        // 字の真上に出す。上に入らなければ下へ、横は画面の内側へ寄せる
+        const top = r.top - zr.height - 8 >= 8 ? r.top - zr.height - 8 : r.bottom + 8;
+        z.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - zr.width / 2, document.documentElement.clientWidth - zr.width - 8))}px`;
+        z.style.top = `${top}px`;
+      }, 400);
+    });
+    el("treePane").addEventListener("mouseout", e => {
+      const g = e.target.closest(".g");
+      if (g && !(e.relatedTarget && g.contains(e.relatedTarget))) hideTreeZoom();
+    });
+    window.addEventListener("scroll", hideTreeZoom, true);
+
     // 右クリックでメニューを出す（両ペインとも）
     /* 右クリックのメニュー。この字へ移動するか、この字を組み立てている部品・辞書の部首・IDS をコピーする。
        部品は枠に入れるときと同じ「位置 部品」で並べ、コピーするのは部品の字だけ */

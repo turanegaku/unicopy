@@ -449,6 +449,9 @@
     .tree-node .g { font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; font-size: var(--fs-3); line-height: 1.15; display: block; cursor: pointer; }
     .tree-node .m { font-size: var(--fs-1); color: var(--faint); display: block; line-height: 1.1; white-space: nowrap; }
     .tree-node.hit .g { border-radius: 4px; }
+    /* ツリーの字を留めたときの拡大（app.js hideTreeZoom）。字形はツリーと同じ書体で描く */
+    .tree-zoom { position: fixed; z-index: 1000; padding: 4px 12px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); color: var(--fg); font-family: "IPAmj明朝", "IPAmjMincho", "Noto Serif JP", serif; font-size: 6rem; line-height: 1.2; pointer-events: none; }
+    body.no-mjfont .tree-zoom { font-family: "Noto Serif JP", serif; }
     /* 右クリックで飛んだ先を1秒だけ水準色のリングで示す */
     .card.flash { box-shadow: 0 0 0 3px var(--flash); background: var(--flash-bg); }
     .tree-empty { padding: 20px; color: var(--faint); font-size: var(--fs-2); text-align: center; }
