@@ -5,6 +5,7 @@
 
 水準字ぶんは parts.js の parts ブロックに、外字ぶんは mjmap.json の ids / dictRadicals に置く
 （build_radicals.py と同じ分け方。外字ぶんの IDS は 850KB あり、parts.js に足すと常に読まれる）。
+MJ に無い統合漢字・拡張A のうち IDS を持つ字も、外字ぶんと同じ所に置き、字の並びを mjmap.json の extra に持つ。
 どの部品がどの位置に入るかは parts.js の照合関数が実行時に決める。ここは IDS をそのまま運ぶだけにして、
 位置の規則を Python と JS の二か所に持たない。
 ソースデータはリポジトリに入れず引数で渡す（build-mjmap.py と同じ）。標準ライブラリのみで読む。
@@ -86,21 +87,29 @@ def apply(ids_path, unihan_path, js_path, mm):
     rad = read_dict_radicals(unihan_path)
     jis_chars = sorted({c for _, c in mm['jis'] if c not in SYMBOLS})
     gaiji_chars = sorted({m[1][0] for m in mm['mj'] if m[1]} - set(jis_chars) - SYMBOLS)
+    # MJ は行政の字なので、簡体字や他の地域の字が統合漢字にも 2,700 字ほど抜けている。拡張B 以降はふつうの PC で
+    # 描けないので足さない。IDS の無い字は部品で引けないので足しても見つからない
+    known = set(jis_chars) | set(gaiji_chars) | SYMBOLS
+    extra_chars = sorted(c for c, s in ids.items()
+                         if len(c) == 1 and (0x3400 <= ord(c) <= 0x4DBF or 0x4E00 <= ord(c) <= 0x9FFF)
+                         and c not in known and s != c)
 
     part_ids = with_components(ids, jis_chars)
-    gaiji_ids = with_components(ids, gaiji_chars, skip=part_ids)
-    dict_jis, dict_gaiji = by_radical(rad, jis_chars), by_radical(rad, gaiji_chars)
+    gaiji_ids = with_components(ids, gaiji_chars + extra_chars, skip=part_ids)
+    dict_jis, dict_gaiji = by_radical(rad, jis_chars), by_radical(rad, gaiji_chars + extra_chars)
 
     js = open(js_path, encoding='utf-8').read()
     i, j = js.index(MARK_BEGIN), js.index(MARK_END) + len(MARK_END)
     open(js_path, 'w', encoding='utf-8').write(js[:i] + js_block(part_ids, dict_jis).lstrip() + js[j:])
     mm['ids'] = gaiji_ids
     mm['dictRadicals'] = dict_gaiji
+    mm['extra'] = ''.join(extra_chars)
 
     n_rad = lambda d: sum(len(s) for s in d.values())
     print(f'{js_path}: IDS {len(part_ids):,}（うち部品のみ {len(set(part_ids) - set(jis_chars)):,}）'
           f' / 辞書の部首 {n_rad(dict_jis):,}/{len(jis_chars):,}字\n'
-          f'外字: IDS {len(gaiji_ids):,} / 辞書の部首 {n_rad(dict_gaiji):,}/{len(gaiji_chars):,}字', file=sys.stderr)
+          f'外字: IDS {len(gaiji_ids):,} / 辞書の部首 {n_rad(dict_gaiji):,}/{len(gaiji_chars) + len(extra_chars):,}字'
+          f'（うち MJ に無い統合漢字・拡張A {len(extra_chars):,}字）', file=sys.stderr)
 
 
 def main():
