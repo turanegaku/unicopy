@@ -404,7 +404,7 @@
       initPartIndex();
       if (!mjmap.ids) { gaijiState = 'old'; return; }   // IDS を持たない古い mjmap.json
       const job = indexJob;
-      const chars = [...new Set(mjBase.filter(c => c && !charLevel.has(c)))];
+      const chars = [...new Set(mjBase.filter(c => c && !charLevel.has(c)).concat(Array.from(mjmap.extra || "")))];
       // 入れ子の照合は 5 万字でも数十 ms なので、索引を待たずに外字も入れる
       nestUniverse = nestUniverse.concat(chars);
       gaijiState = 'building';
@@ -1273,7 +1273,7 @@
       // 外字は面区点を持たないので、面区点で絞っているときは出さない。
       // 縮退先も持たないので、「縮退があるものだけ」のときも出さない。基底の字が縮退に関わっている
       // だけで通すと、俗字だけ ON でも外字が100枚ついてきて、縮退のある字の数に見えてしまう
-      if (!kuOk && !el('onlyShrink').checked) total += renderGaiji(container, targetChars, blk);
+      if (!kuOk && !el('onlyShrink').checked) total += renderGaiji(container, targetChars, blk) + renderExtra(container, targetChars, blk);
 
       if (total === 0) {
         container.innerHTML = zeroHtml();
@@ -1364,8 +1364,8 @@
        窓に入るたびに組み直されるので、札も説明も listOrder の中身だけから作れるようにしてある。 */
     function listCardHtml(i, j) {
       const it = listOrder[i];
-      const title = it.mj
-        ? `「${it.char}」 ${it.mj} U+${it.char.codePointAt(0).toString(16).toUpperCase()} ${it.blk}`
+      const title = it.mj || it.extra
+        ? `「${it.char}」 ${it.mj || "MJに無い字"} U+${it.char.codePointAt(0).toString(16).toUpperCase()} ${it.blk}`
         : `「${it.char}」 ${charJis.get(it.char) || (it.ku == null ? `第${it.level}水準` : `第${it.level}水準 区${it.ku}`)}`
           + (JIS_IVS[it.char] ? "\n" + jisIvsNote(it.char) : "");
       // 光らせる1枚はDOMではなく添字で持っているので（flashI）、ここで着せ直す
@@ -1828,6 +1828,22 @@
         prevBlock = blk2;
       });
       addSection(container, "lvl5", "MJ外字", items.length, base);
+      return items.length;
+    }
+    /* MJ に無い統合漢字・拡張A（mjmap.json の extra）。縮退先も MJ 番号も持たないので、ツリーの行は無い */
+    function renderExtra(container, targetChars, blk) {
+      if (!mjmap || !mjmap.extra) return 0;
+      const items = Array.from(mjmap.extra).filter(ch =>
+        (targetChars === null || targetChars.has(ch)) && (!blk || cjkBlock(ch.codePointAt(0)) === blk));
+      if (!items.length) return 0;
+      const base = listOrder.length;
+      let prevBlock = null;
+      items.forEach(ch => {
+        const blk2 = cjkBlock(ch.codePointAt(0));
+        listOrder.push({ char: ch, level: 5, extra: true, blk: blk2, tag: blk2 !== prevBlock ? blk2 : "" });
+        prevBlock = blk2;
+      });
+      addSection(container, "lvl5", "MJに無い漢字", items.length, base);
       return items.length;
     }
 
@@ -2783,6 +2799,8 @@
         if (SYMBOL_CHARS.has(m[1])) return; // 記号は外字に出さない
         seen.add(cjkBlock(m[1].codePointAt(0)));
       });
+      // MJ に無い漢字も同じブロックで絞る（統合漢字・拡張A しか無いので、どちらかが増えるだけ）
+      for (const c of mjmap.extra || "") seen.add(cjkBlock(c.codePointAt(0)));
       const g = document.createElement("optgroup");
       g.label = "MJ外字";
       CJK_BLOCKS.map(b => b[2]).concat("その他").forEach(name => {
