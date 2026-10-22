@@ -156,6 +156,9 @@
     .pbox-info .n { font-family: ui-monospace, monospace; font-size: var(--fs-3); font-weight: bold; color: var(--accent); font-variant-numeric: tabular-nums; }
     .pbox-info .note { font-size: var(--fs-1); color: var(--muted); }
     .zero-tips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: var(--fs-2); }
+    /* 0 件のときの「もしかして」。一覧のカードと同じ形で、押せばコピー・右クリックでメニューも出る */
+    .maybe-head { margin-top: 24px; color: var(--sub); font-weight: 700; }
+    .maybe { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; margin-top: 8px; color: var(--fg); }
     /* ホバーの無い端末では、指す前に区画が分からないので境界線を常に出す */
     @media (hover: none) { .pbox-guides { display: inline; } }
 
@@ -188,7 +191,7 @@
     .pal-direct:empty { display: none; }
     .pal-direct { display: flex; flex-direction: column; gap: 4px; }
     .pal-direct-btn { width: 100%; padding: 6px 8px; border: 1px dashed var(--main); border-radius: 4px; background: var(--surface); color: var(--main); font: inherit; text-align: left; cursor: pointer; }
-    .pal-direct-btn:disabled { opacity: 0.4; cursor: default; }
+    .pal-direct-btn.zero { opacity: 0.6; }
     /* 候補を端までスクロールしても、その先の本体のページは送らない。
        見出しや入力の上でも止まるよう、束そのものもスクロールの容器にしておく（候補が縮むので溢れはしない） */
     .palette, .pal-chips { overflow-y: auto; overscroll-behavior: contain; }

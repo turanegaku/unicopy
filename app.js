@@ -981,8 +981,8 @@
         const n = partCount(pos, part, T);
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'pal-direct-btn';
-        b.disabled = !n;
+        b.className = 'pal-direct-btn' + (n ? '' : ' zero');
+        // 0 字でも入れられるようにする。他の条件を外せば当たるかもしれないし、0 件なら「もしかして」が出る
         b.textContent = `${label}　${n}字`;
         b.onclick = () => isNestPos(pos) ? pick(pos, part) : setSlot(pos, part);
         direct.appendChild(b);
@@ -1072,8 +1072,70 @@
         return [...sim, `<button type="button" class="cond" data-off="${pos}">${SLOT_LABEL[pos]} <b>${slotGlyph(pos, slots[pos])}</b> を外すと ${T ? T.size.toLocaleString() : 'すべての'}字</button>`];
       });
       tips.unshift(...nestTips);
+      const maybe = maybeChars();
       return '<div class="empty-msg">該当する漢字が見つかりませんでした。'
-        + (tips.length ? `<div class="zero-tips">${tips.join('')}</div>` : '') + '</div>';
+        + (tips.length ? `<div class="zero-tips">${tips.join('')}</div>` : '')
+        + (maybe.length ? `<div class="maybe-head">もしかして</div><div class="maybe">${maybe.map(([ch, why]) =>
+            cardHtml(`lvl${charLevel.get(ch) || 5}`, ch, esc(`「${ch}」 ${why}`), '', '')).join('')}</div>` : '')
+        + '</div>';
+    }
+    /* 0 件のときの「もしかして」。条件を 1 つ外すと当たる字のうち、外した部品を位置違いか似た形で持つ字を先に出す。
+       並びは、条件の部品を IDS の中に何個持つか（同じ部品は数だけ）で決める。偏 貝・旁 貝 なら、
+       貝 を 1 つしか持たない 販 より、旁 の下に 2 つ目の 貝 がある 䞉 が先に来る */
+    const MAYBE_N = 24;
+    function maybeChars() {
+      const anywhere = part => {
+        const set = new Set();
+        for (const p in partIndex) partForms(part).forEach(f => (partIndex[p].get(f) || []).forEach(c => set.add(c)));
+        return set;
+      };
+      const near = part => new Set([part, ...similarOf(part)].flatMap(q => [...anywhere(q)]));
+      const live = liveSlots();
+      const offs = [
+        ...Object.keys(live).map(pos => ({ label: `${SLOT_LABEL[pos]} ${slotGlyph(pos, live[pos])}`, part: live[pos], pos,
+          rest: conditionChars(pos), near: pos === 'ぶしゅ' ? new Set() : near(live[pos]) })),
+        ...(nestMode ? nestSteps : []).map(([, part], i) => part == null ? null
+          : { label: `${stepLabel(i)} ${part}`, part, rest: conditionChars(null, dropStep(nestSteps, i)), near: near(part) }).filter(Boolean),
+      ];
+      if (!offs.length) return [];
+      const want = offs.filter(o => o.pos !== 'ぶしゅ').map(o => o.part);   // 辞書の部首は番号で持つので数えない
+      const best = new Map();   // 字 -> [点, 説明]
+      offs.forEach(o => {
+        // 他の条件がすべて無い（null）ときは、外した部品を持っているかだけで拾う
+        const pool = o.rest ? [...o.rest].filter(c => o.near.has(c)) : [...o.near];
+        pool.forEach(ch => {
+          const n = coverage(ch, want);
+          if (!best.has(ch) || best.get(ch)[0] < n) best.set(ch, [n, `${o.label} が違う位置か似た形`]);
+        });
+      });
+      // 1 つ外しても当たらない（2 つ以上ずれている）ときは、条件の部品をどれか持つ字を、持つ数で並べる
+      if (!best.size) {
+        const pool = new Set(offs.flatMap(o => [...o.near]));
+        pool.forEach(ch => {
+          const n = coverage(ch, want);
+          if (n >= Math.min(2, want.length)) best.set(ch, [n, `条件の部品を ${n} 個持つ`]);
+        });
+      }
+      return [...best].sort((a, b) => b[1][0] - a[1][0]
+          || (charLevel.get(a[0]) || 5) - (charLevel.get(b[0]) || 5) || a[0].codePointAt(0) - b[0].codePointAt(0))
+        .slice(0, MAYBE_N).map(([ch, [, why]]) => [ch, why]);
+    }
+    // 字の IDS を下りながら、parts の部品を 1 つずつ消し込んだ数。同じ部品は持っている数までしか数えない
+    function coverage(ch, parts) {
+      const have = [];
+      const walk = (c, depth) => {
+        const s = lookupIds(c);
+        if (!s || s === c || depth > 8) return;
+        for (const x of Array.from(s)) if (!/[\u2FF0-\u2FFF\u31EF]/.test(x)) { have.push(x); walk(x, depth + 1); }
+      };
+      walk(ch, 0);
+      let n = 0;
+      parts.forEach(p => {
+        const forms = [p, ...similarOf(p)].flatMap(partForms);
+        const k = have.findIndex(x => forms.includes(x));
+        if (k >= 0) { have.splice(k, 1); n++; }
+      });
+      return n;
     }
 
     /* 字の部品を条件に入れる操作（右クリックのメニューと、カードの「構成」のボタン）。部首検索ではその位置の部品にする。
