@@ -421,14 +421,13 @@
       setTimeout(step, 0);
     }
 
-    // 人 と打って 亻 にも当てる。親字には位置別の字体を足すが、字体から親字へは広げない（月 から 肉 は引かない）
-    /* 同じ部品の書き方の揺れ。IDS の出典で 甾 は 巛、畄 は 𭕄 と書かれていて、片方で選ぶともう片方が引けない。
+    /* 部品は入れた字形のまま引く（人 で 亻 を、火 で 灬 を引かない）。位置別の字体は形が違い、
+       脚の 火（炎 灸）と 灬（照 然）のように別々に引きたいので、部首検索も組立検索も親字から広げない。
+       束で 人 と打てば 亻 のチップも出る（RADICAL_FAMILY で照らす）ので、字体を選ぶ手間は増えない。
+       同じ部品の書き方の揺れ。IDS の出典で 甾 は 巛、畄 は 𭕄 と書かれていて、片方で選ぶともう片方が引けない。
        似た部品（SIMILAR_PARTS、取り違えの直し先）と違い、どちらで選んでも両方に当てる。足すときは 1 組 1 文字列 */
     const PART_ALIKE = ['巛𭕄'];
-    const partForms = p => {
-      const g = PART_ALIKE.find(g => Array.from(g).includes(p));
-      return (g ? Array.from(g) : [p]).flatMap(q => [q, ...Object.keys(RADICAL_FAMILY).filter(v => RADICAL_FAMILY[v] === q)]);
-    };
+    const partForms = p => { const g = PART_ALIKE.find(g => Array.from(g).includes(p)); return g ? Array.from(g) : [p]; };
     function slotChars(pos, part) {
       const key = `${pos}\t${part}`;
       let set = slotCache.get(key);
@@ -1181,7 +1180,8 @@
        （燕 は火部だが、火は脚の 灬）。部首名に「部」を付け、その字のどの位置にどの字形で入っているかを添える */
     function radicalLabel(base, rad) {
       const g = slotGlyph('ぶしゅ', rad);
-      const forms = partForms(g);
+      // 辞書の部首は位置別の字体ごとまとめた区分なので、ここだけ字体へ広げて探す（火部 の 燕 は 灬）
+      const forms = [g, ...Object.keys(RADICAL_FAMILY).filter(v => RADICAL_FAMILY[v] === g)];
       const r = partsOf(base) || {};
       const pos = ['へん', 'つくり', 'かんむり', 'あし', 'たれ', 'にょう', 'かまえ', 'なかみ', 'なし'].find(p => r[p] && forms.some(f => r[p].has(f)));
       const where = pos ? `（${SLOT_LABEL[pos]} ${forms.find(f => r[pos].has(f))}）` : '';
